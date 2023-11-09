@@ -17,7 +17,7 @@ library('readxl')
 
 
 #Set working directory and the path of all respo data files
-#setwd("/Users/ninahmunk/Desktop/Projects/Regeneration/Respiration/Data/initial")
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/initial")
 getwd()
 path.p<-"/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/initial/runs"
 
@@ -40,9 +40,9 @@ Photosynthesis$coral_id <- file.names.full
 View(Photosynthesis)
 
 #load in sample information files
-Treatments<- read.csv(file= "Respiration/Data/initial/samp_info.csv") #genotype, wound type, temp
-Volume<- read.csv(file= "Respiration/Data/initial/chamber_vol.csv") #vol of water in each chamber 
-SA<- read.csv(file= "Respiration/Data/initial/final_surface_areas.csv")%>% #final SA of each coral
+Treatments<- read.csv(file= "samp_info.csv") #genotype, wound type, temp
+Volume<- read.csv(file= "chamber_vol.csv") #vol of water in each chamber 
+SA<- read.csv(file= "final_surface_areas.csv")%>% #final SA of each coral
   select(coral_id, CSA_cm2)%>% 
   mutate(coral_id = as.character(coral_id)) 
 list_df = list(Treatments, Volume, SA) 
@@ -62,7 +62,7 @@ Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_
 View(Sample.Info)
 
 #load in times as a list the same length as the number of files, im not sure I need this 
-starttimes<- read.csv(file= "Respiration/Data/initial/starttimes.csv")
+starttimes<- read.csv(file= "starttimes.csv")
 rtime<-starttimes$rtime #list respiration start times. For respiration measurements, filter as > than this time
 ptime<-starttimes$ptime #for photosynthesis, filter as < than this time
 
@@ -112,7 +112,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   n<-dim(Photo.Data1)[1] # length of full data
   Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 25) #start at beginning of dark phase data point (25 minutes in) 
   n<-dim(Photo.Data1)[1] #list length of trimmed data
-  Photo.Data1$sec <- seq(1, by = 3, length.out = n) #set seconds by one from start to finish of run in a new column
+  Photo.Data1$sec <- seq(1, by = 3, length.out = n) #set seconds by three from start to finish of run in a new column
   
   
   #Save plot prior to and after data thinning to make sure thinning is not too extreme
@@ -167,8 +167,9 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
 }
 write.csv(Respiration, 'Respiration/Output/Respiration.csv')  
 
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output")
 #read in Photo.R file so dont need to run entire for loop again
-Respiration <- read.csv('Respiration/Output/Respiration.csv')
+Respiration <- read.csv('Respiration.csv')
 Respiration$coral_id[9]='20230605_g1_25_O2'
 
 # Calculate P and R rate
@@ -189,6 +190,44 @@ Respiration$chamber_vol <- Respiration$chamber_vol/1000 #calculate volume
 
 #Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
 Respiration$umol.sec <- Respiration$umol.L.sec*Respiration$chamber_vol
+
+# extract the blank rates for each run and put them into a new column in main respo dataframe corresponding to the correct coral numbers
+blank_rate <- Respiration %>%
+  filter(coral_id == "20230605_g1_blank_O2") %>%
+  select(umol.sec) %>%
+  pull()
+
+Respiration_corr <- Respiration %>%
+  mutate(umol.sec.corr = ifelse(coral_num %in% c(105, 76, 18, 25, 41, 64, 38, 21, 7), blank_rate, umol.sec))
+
+       
+# Extract blank rates
+blanks <- c(37, 77, 117, 38, 78, 118, 39, 79, 119, 40, 80, 120)
+
+# Extract rows from the data frame
+blank_rates <- Respiration[blanks, ]
+
+# Print the extracted rows
+print(blank_rates)
+
+
+
+# Find the rate for 20230605_g1_blank_O2
+blank_rate <- Respiration %>%
+  filter(coral_id == "20230605_g1_blank_O2") %>%
+  select(umol.sec) %>%
+  pull()
+
+# List of coral numbers you want to calculate differences for
+coral_numbers <- c(105, 76, 18, 25, 41, 64, 38, 21, 7)
+
+# Calculate differences for the specified coral numbers
+differences <- Respiration %>%
+  filter(coral_num %in% coral_numbers) %>%
+  mutate(difference = umol.sec - blank_rate) %>%
+  select(coral_num, difference)
+
+print(differences)
 
 #Account for blank rate by temperature
 #convert character columns to factors
