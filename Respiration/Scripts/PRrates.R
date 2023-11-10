@@ -66,35 +66,7 @@ starttimes<- read.csv(file= "starttimes.csv")
 rtime<-starttimes$rtime #list respiration start times. For respiration measurements, filter as > than this time
 ptime<-starttimes$ptime #for photosynthesis, filter as < than this time
 
-# #create path to single respo file 
-# path.p1 <- file.path(path.p, "20230605_g1_2_O2.csv")
-# path.p1 <- path.p1[,nrow(path.p1)-2]
-# # Read the respo CSV file using the created path
-# 
-# R <- read.csv(path.p1, skip = 1, header=T)
-# R <- R[1:(nrow(R)-1),]
-# 
-# 
-# R <- R%>%
-#   select(delta_t, Value, Temp)%>% # select columns 'delta_t', 'Value', and 'Temp'
-#   mutate(delta_t=as.numeric(delta_t))%>%
-#   filter(delta_t > 25.0)
-# #fit all possible linear regressions 
-# Rmodel <- rankLocReg(xall=R$delta_t, yall=R$Value, alpha=0.4, method= "pc", verbose= TRUE) 
-# plot(Rmodel)
-# summary()
-# #trying to extract intercept and slope and put it into R.rates dataframe corresponding to file name in coral_id column 
-# row_index <- which(R.rates$coral_id == file.names.clean)
-# R.rates[row_index, c("Intercept", "umol.L.sec")] <- c(Rmodel$allRegs, c(4,5))
-# 
-# P<-  read.csv(path.p1, skip = 1, header=T)%>%
-#   select(delta_t, Value, Temp)%>% # select columns 'delta_t', 'Value', and 'Temp'
-#   mutate(delta_t=as.numeric(delta_t))%>%
-#   filter(delta_t > 10 & delta_t < 25)
-# 
-# Pmodel <- rankLocReg(xall=P$delta_t, yall=P$Value, alpha=0.4, method= "pc", verbose= TRUE) # 0.4 means it has to encompass at least 40% of the data points
-# plot(Pmodel)
-
+############### RESPIRATION ############################ #####
 # for every file in list calculate O2 uptake or release rate and add the data to the Photo.R dataframe
 for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or release rate and add the data to the Photo.R dataframe
   
@@ -167,136 +139,205 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
 }
 write.csv(Respiration, 'Respiration/Output/Respiration.csv')  
 
-setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output")
+# Calculate P and R rate
+#Respiration$fragment.ID.full<-Respiration$fragment.ID
+#Respiration$fragment.ID<-NULL
+#View(Respiration)
+
+#renaming and reordering columns in sample info and then combining it with respiration df based on coral id
+names(Sample.Info)[2] <- "coral_num"
+names(Sample.Info)[8] <- "coral_id"
+Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
+
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
 #read in Photo.R file so dont need to run entire for loop again
-Respiration <- read.csv('Respiration.csv')
+Respiration <- read.csv('Output/Respiration.csv')
 Respiration$coral_id[9]='20230605_g1_25_O2'
+#list_df = list(Respiration, Sample.Info) 
+#Respiration<-list_df%>%purrr::reduce(left_join, by= 'coral_id')
+Respiration<-left_join(Respiration, Sample.Info, by='coral_id')%>%
+  mutate(coral_num = as.numeric(coral_num))%>%
+  rename(surf.area.cm2=CSA_cm2)
+#Convert sample volume to L
+Respiration$chamber_vol <- Respiration$chamber_vol/1000 #calculate volume
+#Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
+Respiration$umol.sec <- Respiration$umol.L.sec*Respiration$chamber_vol
+
+# Extract rows with blank data from respiration data frame
+blankrows <- c(37, 77, 117, 38, 78, 118, 39, 79, 119, 40, 80, 120)
+blank_rates <- Respiration[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
+
+Respiration<- drop_na(Respiration)
+View(Respiration)
+
+blanks<-read.csv('Data/initial/blanks.csv')%>%
+  select(-'X')%>%
+  rename(blank_id = coral_id)
+View(blanks)
+
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE)
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+View(merged_data)
+Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
+Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
+View(Respiration)
+
+#### Normalize to SA (surface area)
+
+#Calculate net P and R
+Respiration$umol.cm2.hr <- (Respiration$umol.sec.corr*3600)/Respiration$surf.area.cm2 #mmol cm-2 hr-1
+# Take the absolute (positive) value of the 'umol.cm2.hr' column
+Respiration<- Respiration%>%
+  mutate(umol.cm2.hr = abs(umol.cm2.hr))%>%
+  mutate(genotype = as.factor(genotype))
+
+# log the rates
+Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
+
+#export normalized rates
+write.csv(Respiration, 'Output/norm_resp_initial.csv')
+
+#visualize respo rates by genotype 
+ggplot(Respiration, aes(x=genotype, y=umol.cm2.hr))+
+  geom_boxplot()
+############### PHOTOSYNTHESIS ############################ #####
+# for every file in list calculate O2 uptake or release rate and add the data to the Photo.R dataframe
+for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or release rate and add the data to the Photo.R dataframe
+  
+  #find the lines in sample info that have the same file name that is being brought in
+  
+  FRow<-which(Sample.Info$file.names.full==strsplit(file.names[i],'.csv'))
+  
+  # read in the O2 data one by one
+  Photo.Data1 <-read.csv(file.path(path.p,file.names[i]), skip = 1, header=T) # skips the first line
+  Photo.Data1  <- Photo.Data1[,c("delta_t","Value","Temp")] #subset columns of interest
+  #Photo.Data1$Time <- as.POSIXct(Photo.Data1$Time,format="%H:%M:%S", tz = "") #convert time from character to time
+  Photo.Data1 <- na.omit(Photo.Data1) #omit NA from data frame
+  
+  # clean up some of the data
+  n<-dim(Photo.Data1)[1] # length of full data
+  Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 10 & delta_t < 25) #start at beginning of light phase (10 minutes in) and stop at 25 min (start of dark phase)
+  n<-dim(Photo.Data1)[1] #list length of trimmed data
+  Photo.Data1$sec <- seq(1, by = 3, length.out = n) #set seconds by three from start to finish of run in a new column
+  
+  
+  #Save plot prior to and after data thinning to make sure thinning is not too extreme
+  rename <- sub(".csv","", file.names[i]) # remove all the extra stuff in the file name
+  
+  pdf(paste0("Respiration/Output/Photosynthesis/",rename,"thinning.pdf")) # open the graphics device
+  
+  par(omi=rep(0.3, 4)) #set size of the outer margins in inches
+  par(mfrow=c(1,2)) #set number of rows and columns in multi plot graphic
+  plot(Value ~ sec, data=Photo.Data1 , xlab='Time (seconds)', ylab=expression(paste(' O'[2],' (',mu,'mol/L)')), type='n', axes=FALSE) #plot (empty plot to fill) data as a function of time
+  usr  <-  par('usr') # extract the size of the figure margins
+  rect(usr[1], usr[3], usr[2], usr[4], col='grey90', border=NA) # put a grey background on the plot
+  whiteGrid() # make a grid
+  box() # add a box around the plot
+  points(Photo.Data1 $Value ~ Photo.Data1 $sec, pch=16, col=transparentColor('dodgerblue2', 0.6), cex=1.1)
+  axis(1) # add the x axis
+  axis(2, las=1) # add the y-axis
+  
+  # Thin the data to make the code run faster
+  Photo.Data.orig <-Photo.Data1 #save original unthinned data
+  Photo.Data1 <-  thinData(Photo.Data1 ,by=5)$newData1 #thin data by every 5 points for all the O2 values
+  Photo.Data1$sec <- as.numeric(rownames(Photo.Data1 )) #maintain numeric values for time
+  Photo.Data1$Temp<-NA # add a new column to fill with the thinned data
+  Photo.Data1$Temp <-  thinData(Photo.Data.orig,xy = c(1,3),by=5)$newData1[,2] #thin data by every 5 points for the temp values
+  
+  # plot the thinned data
+  plot(Value ~ sec, data=Photo.Data1 , xlab='Time (seconds)', ylab=expression(paste(' O'[2],' (',mu,'mol/L)')), type='n', axes=FALSE) #plot thinned data
+  usr  <-  par('usr')
+  rect(usr[1], usr[3], usr[2], usr[4], col='grey90', border=NA)
+  whiteGrid()
+  box()
+  points(Photo.Data1 $Value ~ Photo.Data1 $sec, pch=16, col=transparentColor('dodgerblue2', 0.6), cex=1.1)
+  axis(1)
+  axis(2, las=1)
+  ##Olito et al. 2017: It is running a bootstrapping technique and calculating the rate based on density
+  #option to add multiple outputs method= c("z", "eq", "pc")
+  Regs  <-  rankLocReg(xall=Photo.Data.orig$sec, yall=Photo.Data.orig$Value, alpha=0.5, method="pc", verbose=TRUE)  
+  
+  # add the regression data
+  plot(Regs)
+  dev.off()
+  
+  
+  # fill in all the O2 consumption and rate data
+  Photosynthesis[i,2:3] <- Regs$allRegs[1,c(4,5)] #inserts slope and intercept in the dataframe
+  Photosynthesis[i,1] <- rename #stores the file name in the Date column
+  Photosynthesis[i,4] <- mean(Photo.Data1$Temp, na.rm=T)  #stores the Temperature in the Temp.C column
+  #Photo.R[i,5] <- PR[j] #stores whether it is photosynthesis or respiration
+  
+  
+  # rewrite the file everytime... I know this is slow, but it will save the data that is already run
+}
+write.csv(Photosynthesis, 'Respiration/Output/Photosynthesis/Photosynthesis.csv')  
 
 # Calculate P and R rate
 #Respiration$fragment.ID.full<-Respiration$fragment.ID
 #Respiration$fragment.ID<-NULL
 #View(Respiration)
 
+#renaming and reordering columns in sample info and then combining it with respiration df based on coral id
 names(Sample.Info)[2] <- "coral_num"
 names(Sample.Info)[8] <- "coral_id"
 Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
-list_df = list(Respiration, Sample.Info) 
-Respiration<-list_df%>%purrr::reduce(left_join, by= 'coral_id')
-Respiration<-left_join(Respiration, Sample.Info)
-View(Respiration)
 
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
+#read in Photo.R file so dont need to run entire for loop again
+Respiration <- read.csv('Output/Respiration.csv')
+Respiration$coral_id[9]='20230605_g1_25_O2'
+#list_df = list(Respiration, Sample.Info) 
+#Respiration<-list_df%>%purrr::reduce(left_join, by= 'coral_id')
+Respiration<-left_join(Respiration, Sample.Info, by='coral_id')%>%
+  mutate(coral_num = as.numeric(coral_num))%>%
+  rename(surf.area.cm2=CSA_cm2)
 #Convert sample volume to L
 Respiration$chamber_vol <- Respiration$chamber_vol/1000 #calculate volume
-
 #Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
 Respiration$umol.sec <- Respiration$umol.L.sec*Respiration$chamber_vol
 
-# extract the blank rates for each run and put them into a new column in main respo dataframe corresponding to the correct coral numbers
-blank_rate <- Respiration %>%
-  filter(coral_id == "20230605_g1_blank_O2") %>%
-  select(umol.sec) %>%
-  pull()
+# Extract rows with blank data from respiration data frame
+blankrows <- c(37, 77, 117, 38, 78, 118, 39, 79, 119, 40, 80, 120)
+blank_rates <- Respiration[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
 
-Respiration_corr <- Respiration %>%
-  mutate(umol.sec.corr = ifelse(coral_num %in% c(105, 76, 18, 25, 41, 64, 38, 21, 7), blank_rate, umol.sec))
-
-       
-# Extract blank rates
-blanks <- c(37, 77, 117, 38, 78, 118, 39, 79, 119, 40, 80, 120)
-
-# Extract rows from the data frame
-blank_rates <- Respiration[blanks, ]
-
-# Print the extracted rows
-print(blank_rates)
-
-
-
-# Find the rate for 20230605_g1_blank_O2
-blank_rate <- Respiration %>%
-  filter(coral_id == "20230605_g1_blank_O2") %>%
-  select(umol.sec) %>%
-  pull()
-
-# List of coral numbers you want to calculate differences for
-coral_numbers <- c(105, 76, 18, 25, 41, 64, 38, 21, 7)
-
-# Calculate differences for the specified coral numbers
-differences <- Respiration %>%
-  filter(coral_num %in% coral_numbers) %>%
-  mutate(difference = umol.sec - blank_rate) %>%
-  select(coral_num, difference)
-
-print(differences)
-
-#Account for blank rate by temperature
-#convert character columns to factors
-Respiration <- Respiration %>%
-  mutate_if(sapply(., is.character), as.factor)
+Respiration<- drop_na(Respiration)
 View(Respiration)
 
-#make the blank column a factor
-Respiration$BLANK<-ifelse(Respiration$treatment=='BLANK', 1,0)
-Respiration$BLANK<-as.factor(Respiration$BLANK)
-View(Respiration)
+blanks<-read.csv('Data/initial/blanks.csv')%>%
+  select(-'X')%>%
+  rename(blank_id = coral_id)
+View(blanks)
 
-#aggregate certain columns together for easier viewing
-photo.blnk <- aggregate(umol.sec ~ species*temp.Cat*light_dark*BLANK, data=Respiration, mean)
-
-#pull out only the blanks
-#photo.blnk<-photo.blnk[photo.blnk$Species=='BK',]
-photo.blnk<-photo.blnk[photo.blnk$BLANK==1,]
-
-# remove the blank column
-photo.blnk$BLANK<-NULL
-
-# rename the blank rate
-colnames(photo.blnk)[4]<-'blank.rate'  
-
-# join the blank data with the rest of the data
-Respiration<-left_join(Respiration, photo.blnk)
-View(Respiration)
-
-# subtract the blanks
-Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.rate
-
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE)
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+View(merged_data)
+Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
+Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
 View(Respiration)
 
 #### Normalize to SA (surface area)#####
 
 #Calculate net P and R
 Respiration$umol.cm2.hr <- (Respiration$umol.sec.corr*3600)/Respiration$surf.area.cm2 #mmol cm-2 hr-1
-
-# remove NAs and blanks
-Respiration<-Respiration[Respiration$BLANK==0,]
-
-#make respiration positive
-Respiration$umol.cm2.hr<- Respiration$umol.cm2.hr
+# Take the absolute (positive) value of the 'umol.cm2.hr' column
+Respiration<- Respiration%>%
+  mutate(umol.cm2.hr = abs(umol.cm2.hr))%>%
+  mutate(genotype = as.factor(genotype))
 
 # log the rates
 Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
 
-#remove empty rows
-Respiration<-Respiration[-which(is.na(Respiration$fragment.ID.full)),]
+#export normalized rates
+write.csv(Respiration, 'Output/norm_resp_initial.csv')
 
-#making the respiration values positive (pull out data for dark treaments)
-Respiration$umol.cm2.hr[Respiration$light_dark=="dark"]<-Respiration$umol.cm2.hr[Respiration$light_dark=="dark"]*-1 
-lessthan <- which(Respiration$light_dark=="dark" & Respiration$umol.cm2.hr < 0)
-Respiration$umol.cm2.hr[lessthan] <- 0
-View(Respiration)
-
-ggplot(Respiration, aes(x=Temp.C, y=umol.cm2.hr,group = fragment.ID, col = fragment.ID))+
-  geom_line(size=2)+
-  geom_point()+  
-  #ylim(0,1.5)+  
-  facet_wrap(~ treatment*light_dark, labeller = labeller(.multi_line = FALSE))+
-  ggsave(filename = "Output/lowvshigh_curves.pdf", device = "pdf", width = 10, height = 10)
-
-write.csv(Respiration, 'Output/TT_Rates.csv') # export all the uptake rates
-
-View(Respiration)
-
-
+#visualize respo rates by genotype 
+ggplot(Respiration, aes(x=genotype, y=umol.cm2.hr))+
+  geom_boxplot()
 ###calculating gross photosynthesis from data frame###
 
 #make ifelse statements to assign light treatments as NP and dark treatments as resp
@@ -382,73 +423,3 @@ ggplot(Photo.T.R, aes(x=Temp.C, y=umol.cm2.hr, group = individual.ID, col = indi
 
 
 
-
-################## loop shenanigans ##### 
-
-
-
-for(i in 1:length(file.names)) {
-  Resp.Data <-read.table(file.path(path.p,file.names[i]), skip = 1, header=T, sep=",", na.string="NA", fill = TRUE, as.is=TRUE, fileEncoding="latin1")
-}
-
-
-
-# LOOP example from Arianna 
-
-# Run loop to extract slopes from respiration data
-for(i in 1:length(file.names)) { # for every file in list start at the first and run this following function
-  Resp.Data <-read.table(file.path(path.p,file.names[i]), skip = 203, header=T, sep=",", na.string="NA", fill = TRUE, as.is=TRUE, fileEncoding="latin1") #reads in the data files
-  Resp.Data$Temp <- Resp.Data[,16] #assigns temp column
-  Resp.Data$Time.Min <- seq.int(from = 0, to = ((nrow(Resp.Data) * 0.05) - 0.05), by = 0.05) #set time in min
-  Resp.Data <- Resp.Data %>% #filters data by phase (respiration only)
-    filter(Time.Min > rtime[i])
-  Resp.Data.N <- Resp.Data[,9] #subset desired columns
-  
-  for(j in 1:(ncol(Resp.Data.N))){
-    model <- rankLocReg(
-      xall=Resp.Data$Time.Min, yall=as.numeric(Resp.Data.N[, j]), 
-      alpha=0.4, method="pc", verbose=TRUE) #extract slopes, percentile rank method with minimum window size of 0.4. This means that in order to fit a slope, it has to encompass at least 40% of available datapoints. 
-    
-    pdf(paste0("../Regeneration_3/respiration/output/",date[i], "_",run[i],"_",rename[j],"_regression_trunc.pdf")) #generate output file names
-    plot(model)
-    dev.off()
-    
-    Resp.Rb[j,1] <- as.character(date[i]) #stores the date
-    Resp.Rb[j,2] <- as.character(run[i]) #stores the run number
-    Resp.Rb[j,3] <- as.character(samp[j+(i-1)*ncol(Resp.Data.N)]) #stores the sample ID
-    Resp.Rb[j,4] <- as.character(rename[j]) #stores the chamber ID
-    Resp.Rb[j,5:6] <- model$allRegs[i,c(4,5)] #inserts slope and intercept in the dataframe
-    
-  }
-  Resp.R <- rbind(Resp.R, Resp.Rb) #bind final data frame
-}
-
-processFile <- function(file.path, rtime, date, run, rename) {
-
-  Resp.Data <- read.table(file.path(path.p, "20230606_g2_89_O2.csv"), skip = 201, sep = ",", na.string = "NA", fill = TRUE, as.is = TRUE, fileEncoding = "latin1")
-  #Resp.Data <- read.table(file.path, skip = 203, header = T, sep = ",", na.string = "NA", fill = TRUE, as.is = TRUE, fileEncoding = "latin1")
-  Resp.Data$Temp <- Resp.Data[,16]
-  Resp.Data$Time.Min <- seq.int(from = 0, to = ((nrow(Resp.Data) * 0.05) - 0.05), by = 0.05)
-  Resp.Data <- Resp.Data %>% filter(Time.Min > rtime)
-  Resp.Data.N <- Resp.Data[, 9]
-  
-  Resp.Rb <- data.frame(Date = character(0), Run = character(0), Sample.ID = character(0),
-                        Chamber.ID = character(0), Slope = numeric(0), Intercept = numeric(0))
-  
-  for (j in 1:(ncol(Resp.Data.N))) {
-    model <- rankLocReg(xall = Resp.Data$Time.Min, yall = as.numeric(Resp.Data.N[, j]),
-                        alpha = 0.4, method = "pc", verbose = TRUE)
-    
-    pdf(paste0("../Regeneration_3/respiration/output/", date, "_", run, "_", rename[j], "_regression_trunc.pdf"))
-    plot(model)
-    dev.off()
-    
-    Resp.Rb[j, 1] <- as.character(date)
-    Resp.Rb[j, 2] <- as.character(run)
-    Resp.Rb[j, 3] <- as.character(samp[j + (i - 1) * ncol(Resp.Data.N)])
-    Resp.Rb[j, 4] <- as.character(rename[j])
-    Resp.Rb[j, 5:6] <- model$allRegs[i, c(4, 5)]
-  }
-  
-  return(Resp.Rb)
-}
