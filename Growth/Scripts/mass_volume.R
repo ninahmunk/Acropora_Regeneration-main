@@ -6,7 +6,7 @@ library(janitor)
 
 #set working directory
 getwd()
-setwd("/Users/ninahmunk/Documents/Projects/Regeneration/Growth/Data")
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Data")
 ################### Initial Skeletal Mass ########################################## ##### 
 #load data 
 weight_initial<- read_xlsx("bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>% 
@@ -55,7 +55,7 @@ chamber_vols_initial<- read_xlsx("bouyantweight_initial.xlsx", sheet= "raw_data"
 
 write_csv(chamber_vols_initial, path = "/Users/ninahmunk/Documents/Projects/Regeneration/Respiration/Data/chamber_vol_initial.csv")
 
-################### Skeletal Mass for 24, Day 10, and Final Timepoints ############### #####
+################### Skeletal Mass + Chamber Volumes for 24hr, Day 10, and Final Timepoints ############### #####
 
 
 weight_24hr<- read_xlsx("bouyantweight_24hr.xlsx", sheet= "raw_data")%>%clean_names()%>% 
@@ -66,6 +66,14 @@ weight_24hr<- read_xlsx("bouyantweight_24hr.xlsx", sheet= "raw_data")%>%clean_na
   select(c(coral_id, dry_mass_coral_g))%>%
   rename("hr24" = "dry_mass_coral_g")
 write_csv(weight_24hr, path = "/Users/ninahmunk/Documents/Projects/Regeneration/Growth/Output/dry_mass_24.csv")
+
+chamber_vols_24hr<- read_xlsx("bouyantweight_24hr.xlsx", sheet= "raw_data")%>%clean_names()%>% 
+  mutate(density_stopper= (air_weight_g * 0.9965)/(air_weight_g - fresh_weight_g))%>%
+  mutate(density_sw= (air_weight_g - salt_weight_g)/ (air_weight_g / density_stopper))%>%
+  mutate(vol_coral_cm3= bouyantweight_g / (density_aragonite - density_sw))%>%
+  mutate(chamber_vol= 650 - vol_coral_cm3)%>%
+  select(c(date, coral_id, chamber_vol))
+write_csv(chamber_vols_24hr, path = "/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/24hours/chamber_vol_24hrs.csv")
 
 weight_day10<- read_xlsx("bouyantweight_day10.xlsx", sheet= "raw_data")%>%clean_names()%>% 
   mutate(density_stopper= (air_weight_g * 0.9965)/(air_weight_g - fresh_weight_g))%>%
@@ -84,6 +92,8 @@ weight_final<- read_xlsx("bouyantweight_final.xlsx", sheet= "raw_data")%>%clean_
   select(c(coral_id, dry_mass_coral_g))%>%
   rename("final" = "dry_mass_coral_g")
 write_csv(weight_final, path = "/Users/ninahmunk/Documents/Projects/Regeneration/Growth/Output/dry_mass_final.csv")
+
+
 
 #load master datasheet with treatment information
 master<- read_xlsx("regen_3_coral_mastersheet.xlsx", sheet ='mastersheet_extended')
