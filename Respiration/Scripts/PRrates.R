@@ -87,7 +87,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   #Save plot prior to and after data thinning to make sure thinning is not too extreme
   rename <- sub(".csv","", file.names[i]) # remove all the extra stuff in the file name
   
-  pdf(paste0("Output/Respiration/",rename,"thinning.pdf")) # open the graphics device
+  pdf(paste0("Respiration/Output/Respiration/Initial/",rename,"thinning.pdf")) # open the graphics device
   
   par(omi=rep(0.3, 4)) #set size of the outer margins in inches
   par(mfrow=c(1,2)) #set number of rows and columns in multi plot graphic
@@ -441,12 +441,12 @@ Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_
 
 # View the updated data frame
 View(Sample.Info)
-################ 24 hour RESPIRATION ########################## #####
+################ 24 hour RESPIRATION & PHOTOSYNTHESIS ########################## #####
 for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or release rate and add the data to the Respiration dataframe
   
   #find the lines in sample info that have the same file name that is being brought in
   
-  FRow<-which(Sample.Info$file.names.full==strsplit(file.names[i],'.csv'))
+  #FRow<-which(Sample.Info$file.names.full==strsplit(file.names[i],'.csv'))
   
   # read in the O2 data one by one
   Photo.Data1 <-read.csv(file.path(path.p,file.names[i]), skip = 1, header=T) # skips the first line
@@ -456,7 +456,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   
   # clean up some of the data
   n<-dim(Photo.Data1)[1] # length of full data
-  Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 25) #start at beginning of dark phase data point (25 minutes in) 
+  Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 10 & delta_t < 25) #Respiration: start at beginning of dark phase data point (25 mins in) Photosynthesis: start after light acclimation (10 mins in) stop at start of dark phase (25 mins in) 
   n<-dim(Photo.Data1)[1] #list length of trimmed data
   Photo.Data1$sec <- seq(1, by = 3, length.out = n) #set seconds by three from start to finish of run in a new column
   
@@ -464,7 +464,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   #Save plot prior to and after data thinning to make sure thinning is not too extreme
   rename <- sub(".csv","", file.names[i]) # remove all the extra stuff in the file name
   
-  pdf(paste0("Output/Respiration/",rename,"thinning.pdf")) # open the graphics device
+  pdf(paste0("Respiration/Output/Photosynthesis/24hours/",rename,"thinning.pdf")) # open the graphics device, edit this to where you want figures to save based on phase//timepoint
   
   par(omi=rep(0.3, 4)) #set size of the outer margins in inches
   par(mfrow=c(1,2)) #set number of rows and columns in multi plot graphic
@@ -511,4 +511,8 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   
   # rewrite the file everytime... I know this is slow, but it will save the data that is already run
 }
-write.csv(Respiration, 'Output/Respiration/Respiration.csv')  
+
+
+write.csv(Respiration, 'Respiration/Output/Photosynthesis/24hours/Respiration.csv')  #edit this to where you want rates to save based on phase//timepoint
+
+
