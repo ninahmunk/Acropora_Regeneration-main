@@ -13,7 +13,7 @@ library('readxl')
 #set working directory
 getwd()
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main")
-################### Initial Skeletal Mass ########################################## ##### 
+################### Initial Skeletal Mass ###################################### ##### 
 #load data 
 weight_initial<- read_xlsx("Growth/Data/bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>% 
   
@@ -49,7 +49,7 @@ write_csv(initial_weight_norm, path = "Growth/Output/normalized_weight/initial.c
 
 #download new dataframe as a csv file to wherever you want on computer
 write_csv(weight_initial, path = "/Users/ninahmunk/Documents/Projects/Regeneration/Growth/Output/dry_mass_initial.csv")
-################### Initial Chamber Volumes ########################################## ##### 
+################### Initial Chamber Volumes #################################### ##### 
 #load data 
 chamber_vols_initial<- read_xlsx("Growth/Data/bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>% 
   
@@ -112,14 +112,24 @@ weight_day10<- read_xlsx("Growth/Data/bouyantweight_day10.xlsx", sheet= "raw_dat
   select(c(coral_id, dry_mass_coral_g))%>%
   rename("day10" = "dry_mass_coral_g")
 
-#write_csv(weight_day10, path = "/Users/ninahmunk/Documents/Projects/Regeneration/Growth/Output/dry_mass_day10.csv")
-
 # day 10 weight standardized by final SA  
 SA_final<-read.csv("Surface_Area/Output/final_surface_areas.csv")
 day10_weight_SA<- left_join(weight_day10, SA_final, by= 'coral_id')
 day10_weight_norm<-day10_weight_SA%>%mutate(day10_g_cm2 = day10 / CSA_cm2)%>%select(coral_id, day10_g_cm2)
 
 write_csv(day10_weight_norm, path = "Growth/Output/normalized_weight/day10.csv")
+
+#write_csv(weight_day10, path = "/Users/ninahmunk/Documents/Projects/Regeneration/Growth/Output/dry_mass_day10.csv")
+
+# day 10 respo chamber volumes
+chamber_vols_day10<- read_xlsx("Growth/Data/bouyantweight_day10.xlsx", sheet= "raw_data")%>%clean_names()%>% 
+  mutate(density_stopper= (air_weight_g * 0.9965)/(air_weight_g - fresh_weight_g))%>%
+  mutate(density_sw= (air_weight_g - salt_weight_g)/ (air_weight_g / density_stopper))%>%
+  mutate(vol_coral_cm3= bouyantweight_g / (density_aragonite - density_sw))%>%
+  mutate(chamber_vol= 650 - vol_coral_cm3)%>%
+  select(c(date, coral_id, chamber_vol))
+
+write.csv(chamber_vols_day10, "/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/day10/chamber_vol_day10.csv")
 
 # final weight 
 weight_final<- read_xlsx("Growth/Data/bouyantweight_final.xlsx", sheet= "raw_data")%>%clean_names()%>% 
@@ -137,6 +147,15 @@ final_weight_norm<-final_weight_SA%>%mutate(final_g_cm2 = final / CSA_cm2)%>%sel
 
 write_csv(final_weight_norm, path = "Growth/Output/normalized_weight/final.csv")
 
+#final respo chamber volumes
+chamber_vols_final<- read_xlsx("Growth/Data/bouyantweight_final.xlsx", sheet= "raw_data")%>%clean_names()%>% 
+  mutate(density_stopper= (air_weight_g * 0.9965)/(air_weight_g - fresh_weight_g))%>%
+  mutate(density_sw= (air_weight_g - salt_weight_g)/ (air_weight_g / density_stopper))%>%
+  mutate(vol_coral_cm3= bouyantweight_g / (density_aragonite - density_sw))%>%
+  mutate(chamber_vol= 650 - vol_coral_cm3)%>%
+  select(c(date, coral_id, chamber_vol))
+
+write.csv(chamber_vols_final, "Respiration/Data/final/chamber_vol_final.csv")
 
 ########################## GROWTH PLOTS ################################# ##### 
 #load master datasheet with treatment information

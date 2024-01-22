@@ -16,14 +16,14 @@ library('janitor')
 library('readxl')
 library("tidyr")
 
-install.packages("tidyverse")
-install.packages("tidyr")
+#install.packages("tidyverse")
+#install.packages("tidyr")
 
 
 #Set working directory and the path of all respo data files
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main")
 getwd()
-path.p<-"/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/24hours/runs"
+path.p<-"/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/final/runs"
 
 #make a list of the respo file names inside intial timepoint folder, n=120
 file.names <- list.files(path = path.p, pattern = "csv$")
@@ -43,7 +43,7 @@ colnames(Photosynthesis) <- c("coral_id","Intercept", "umol.L.sec","Temp.C")
 Photosynthesis$coral_id <- file.names.full
 View(Photosynthesis)
 
-############################## Initial Sample Info ######################################### ##### 
+############### INITIAL SAMPLE INFO ############################################ ##### 
 
 #load in sample information files
 Treatments<- read.csv("Respiration/Data/initial/samp_info.csv") #genotype, wound type, temp
@@ -67,13 +67,13 @@ Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_
 View(Sample.Info)
 
 
-############### Initial RESPIRATION ############################ #####
+############### FORLOOP FOR RESPIRATION RATES ################################## #####
 # for every file in list calculate O2 uptake or release rate and add the data to the Respiration dataframe
 for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or release rate and add the data to the Photo.R dataframe
   
   #find the lines in sample info that have the same file name that is being brought in
   
-  FRow<-which(Sample.Info$file.names.full==strsplit(file.names[i],'.csv'))
+  #FRow<-which(Sample.Info$file.names.full==strsplit(file.names[i],'.csv'))
   
   # read in the O2 data one by one
   Photo.Data1 <-read.csv(file.path(path.p,file.names[i]), skip = 1, header=T) # skips the first line
@@ -83,7 +83,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   
   # clean up some of the data
   n<-dim(Photo.Data1)[1] # length of full data
-  Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 129) #start at beginning of dark phase data point (25 minutes in) 
+  Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 25) #start at beginning of dark phase data point (25 minutes in) 
   n<-dim(Photo.Data1)[1] #list length of trimmed data
   Photo.Data1$sec <- seq(1, by = 3, length.out = n) #set seconds by three from start to finish of run in a new column
   
@@ -91,7 +91,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   #Save plot prior to and after data thinning to make sure thinning is not too extreme
   rename <- sub(".csv","", file.names[i]) # remove all the extra stuff in the file name
   
-  pdf(paste0("Respiration/Output/Respiration/Initial/",rename,"thinning.pdf")) # open the graphics device
+  pdf(paste0("Respiration/Output/Respiration/Final/",rename,"thinning.pdf")) # open the graphics device
   
   par(omi=rep(0.3, 4)) #set size of the outer margins in inches
   par(mfrow=c(1,2)) #set number of rows and columns in multi plot graphic
@@ -138,14 +138,16 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   
   # rewrite the file everytime... I know this is slow, but it will save the data that is already run
 }
-write.csv(Respiration, 'Output/Respiration/Respiration.csv')  
+write.csv(Respiration, 'Output/Respiration/Final/Respiration.csv')  
+
+############### INITIAL RESPIRATION DATA ANALYSIS ############################## #####
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
 
 #renaming and reordering columns in sample info and then combining it with respiration df based on coral id
 names(Sample.Info)[2] <- "coral_num"
 names(Sample.Info)[8] <- "coral_id"
 Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
 
-setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
 #read in Photo.R file so dont need to run entire for loop again
 Respiration <- read.csv('Output/Respiration/Initial/Respiration.csv')%>% select(-X)
 Respiration$coral_id[9]='20230605_g1_25_O2'
@@ -201,7 +203,7 @@ ggplot(Respiration, aes(x=genotype, y=umol.cm2.hr))+
 #export normalized rates
 write.csv(Respiration, 'Output/Respiration/Initial/norm_resp_initial.csv')
 
-############### Initial PHOTOSYNTHESIS ############################ #####
+############### FORLOOP FOR PHOTOSYNTHESIS RATES ############################### #####
 # for every file in list calculate O2 uptake or release rate and add the data to the Photo.R dataframe
 for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or release rate and add the data to the Photo.R dataframe
   
@@ -211,7 +213,8 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   #if (file.names[i] == "20230605_g1_blank4_O2.csv") {
    # next  # Skip the rest of the loop and move to the next iteration
  # }
-  FRow<-which(Sample.Info$file.names.full==strsplit(file.names[i],'.csv'))
+  
+  #FRow<-which(Sample.Info$file.names.full==strsplit(file.names[i],'.csv'))
   
   # read in the O2 data one by one
   Photo.Data1 <-read.csv(file.path(path.p,file.names[i]), skip = 1, header=T) # skips the first line
@@ -221,7 +224,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   
   # clean up some of the data
   n<-dim(Photo.Data1)[1] # length of full data
-  Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 114 & delta_t < 129) #start at beginning of light phase (10 minutes in) and stop at 25 min (start of dark phase)
+  Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 10 & delta_t < 25) #start at beginning of light phase (10 minutes in) and stop at 25 min (start of dark phase)
   n<-dim(Photo.Data1)[1] #list length of trimmed data
   Photo.Data1$sec <- seq(1, by = 3, length.out = n) #set seconds by three from start to finish of run in a new column
   
@@ -229,7 +232,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   #Save plot prior to and after data thinning to make sure thinning is not too extreme
   rename <- sub(".csv","", file.names[i]) # remove all the extra stuff in the file name
   
-  pdf(paste0("Output/Photosynthesis/",rename,"thinning.pdf")) # open the graphics device
+  pdf(paste0("Respiration/Output/Photosynthesis/day10/",rename,"thinning.pdf")) # open the graphics device
   
   par(omi=rep(0.3, 4)) #set size of the outer margins in inches
   par(mfrow=c(1,2)) #set number of rows and columns in multi plot graphic
@@ -276,19 +279,17 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   
   # rewrite the file everytime... I know this is slow, but it will save the data that is already run
 }
-write.csv(Photosynthesis, 'Output/Photosynthesis/Photosynthesis.csv')  
+write.csv(Photosynthesis, 'Respiration/Output/Photosynthesis/day10/Photosynthesis.csv')  
 
-# Calculate P and R rate
-#Respiration$fragment.ID.full<-Respiration$fragment.ID
-#Respiration$fragment.ID<-NULL
-#View(Respiration)
+############### INITIAL PHOTOSYNTHESIS DATA ANALYSIS ########################### #####
+
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
 
 #renaming and reordering columns in sample info and then combining it with respiration df based on coral id
 names(Sample.Info)[2] <- "coral_num"
 names(Sample.Info)[8] <- "coral_id"
 Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
 
-setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
 #read in Photosynthesis file so dont need to run entire for loop again
 Photosynthesis <- read.csv('Output/Photosynthesis/Initial/Photosynthesis.csv')%>%select(-X)
 Photosynthesis$coral_id[9]='20230605_g1_25_O2'
@@ -340,7 +341,7 @@ ggplot(Photosynthesis, aes(x=genotype, y=umol.cm2.hr))+
 write.csv(Photosynthesis, 'Output/Photosynthesis/Initial/norm_photo_initial.csv')
 
 
-#################### Initial Gross Photosynthesis ############################ #####
+############### INITIAL GROSS PHOTOSYNTHESIS DATA ANALYSIS ##################### #####
 
 #calculating Gross Photosynthesis: Pgross = Pnet + R (when using absolute value of R)
 
@@ -412,9 +413,9 @@ ggplot(filtered_data, aes(x = wound, y = umol.cm2.hr, color=temp)) +
   facet_wrap(~ Rate, scales = "free")
 
 
-#################### 24 hr Sample Info ############################ #####
+############### 24 HOUR SAMPLE INFO ############################################ #####
 #load in sample information files
-Treatments<- read.csv("Respiration/Data/24hours/samp_info_24.csv")%>% #genotype, wound type, temp
+Treatments<- read.csv("Respiration/Data/samp_info.csv")%>% #genotype, wound type, temp
   mutate(coral_id = as.character(coral_id)) 
 Treatments$temp[Treatments$coral_id == 17] <- "H"
 Treatments$temp[Treatments$coral_id == 5] <- "A"
@@ -427,7 +428,6 @@ SA<- read.csv("Surface_Area/Output/final_surface_areas.csv")%>% #initial SA of e
 list_df = list(Treatments, Volume, SA) 
 Sample.Info<-list_df%>%purrr::reduce(left_join, by= 'coral_id')%>% #combine data frames by coral_id
   mutate(file.names.full = paste0(date, "_", temp, "_", coral_id)) #create file.names.full column that matches data file names
-#Sample.Info$file.names.full[109:120] <- paste0(substr(Sample.Info$file.names.full[109:120], 1, 11), substr(Sample.Info$file.names.full[109:120], 21, nchar(Sample.Info$file.names.full[109:120]))) #remove characters in the 12-20th place for rows 109-120 in file.names.full column
 Sample.Info$file.names.full <- paste0(substring(Sample.Info$file.names.full, 1, 8), "_24", substring(Sample.Info$file.names.full, 9)) #add _24 after the 8th character 
 blank_files<-read.csv("Respiration/Data/24hours/blanks_only.csv")
 blank_files<-blank_files%>%mutate(blank_files, file.names.full = coral_id)
@@ -435,9 +435,7 @@ Sample.Info <- rbind(Sample.Info, blank_files)
 Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_') # Add '_O2' to the end of each value in the new column
 # View the updated data frame
 View(Sample.Info)
-
-
-################ 24 hour RESPIRATION ########################## #####
+############### 24 hour RESPIRATION ############################################ #####
 for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or release rate and add the data to the Respiration dataframe
   
   #find the lines in sample info that have the same file name that is being brought in
@@ -452,7 +450,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   
   # clean up some of the data
   n<-dim(Photo.Data1)[1] # length of full data
-  Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 10 & delta_t < 25) #Respiration: start at beginning of dark phase data point (25 mins in) Photosynthesis: start after light acclimation (10 mins in) stop at start of dark phase (25 mins in) 
+  Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 25) #Respiration: start at beginning of dark phase data point (25 mins in) Photosynthesis: start after light acclimation (10 mins in) stop at start of dark phase (25 mins in) 
   n<-dim(Photo.Data1)[1] #list length of trimmed data
   Photo.Data1$sec <- seq(1, by = 3, length.out = n) #set seconds by three from start to finish of run in a new column
   
@@ -460,7 +458,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   #Save plot prior to and after data thinning to make sure thinning is not too extreme
   rename <- sub(".csv","", file.names[i]) # remove all the extra stuff in the file name
   
-  pdf(paste0("Respiration/Output/Photosynthesis/24hours/",rename,"thinning.pdf")) # open the graphics device, edit this to where you want figures to save based on phase//timepoint
+  pdf(paste0("Respiration/Output/Respiration/day10/",rename,"thinning.pdf")) # open the graphics device, edit this to where you want figures to save based on phase//timepoint
   
   par(omi=rep(0.3, 4)) #set size of the outer margins in inches
   par(mfrow=c(1,2)) #set number of rows and columns in multi plot graphic
@@ -508,14 +506,15 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   # rewrite the file everytime... I know this is slow, but it will save the data that is already run
 }
 
-write.csv(Respiration, 'Respiration/Output/Photosynthesis/24hours/Respiration.csv')  #edit this to where you want rates to save based on phase//timepoint
+write.csv(Respiration, 'Respiration/Output/Respiration/day10/Respiration.csv')  #edit this to where you want rates to save based on phase//timepoint
+############### 24 HOUR RESPIRATION DATA ANALYSIS  ############################# #####
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
 
 #renaming and reordering columns in sample info and then combining it with respiration df based on coral id
 names(Sample.Info)[2] <- "coral_num"
 names(Sample.Info)[8] <- "coral_id"
 Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
 
-setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
 #read in Photo.R file so dont need to run entire for loop again
 Respiration <- read.csv('Output/Respiration/24hours/Respiration.csv')%>% select(-X)
 Respiration$coral_id <- gsub(" ", "", Respiration$coral_id)
@@ -583,13 +582,14 @@ ggplot(Respiration, aes(x=temp, y=umol.cm2.hr))+
 
 #export normalized rates
 write.csv(Respiration, 'Output/Respiration/24hours/norm_resp_24.csv')
-#############################24HR PHOTOSYNTHESIS######################## #####
+############### 24 HOUR PHOTOSYNTHESIS DATA ANALYSIS ########################### #####
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
+
 #renaming and reordering columns in sample info and then combining it with respiration df based on coral id
 names(Sample.Info)[2] <- "coral_num"
 names(Sample.Info)[8] <- "coral_id"
 Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
 
-setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
 #read in Photosynthesis file so dont need to run entire for loop again
 Photosynthesis <- read.csv('Output/Photosynthesis/24hours/Photosynthesis.csv')%>%select(-X)
 Photosynthesis$coral_id <- gsub(" ", "", Photosynthesis$coral_id)
@@ -641,7 +641,7 @@ ggplot(Photosynthesis, aes(x=temp, y=umol.cm2.hr))+
 #export normalized rates
 write.csv(Photosynthesis, 'Output/Photosynthesis/24hours/norm_photo_24hr.csv')
 
-######### 24 HOUR GROSS PHOTOSYNTHESIS: Pgross = Pnet + R (when using absolute value of R)######## ##### 
+############### 24 HOUR GROSS PHOTOSYNTHESIS DATA ANALYSIS ##################### ##### 
 
 Respiration<-read.csv("Respiration/Output/Respiration/24hours/norm_resp_24.csv") 
 Photosynthesis<-read.csv("Respiration/Output/Photosynthesis/24hours/norm_photo_24hr.csv")
@@ -709,6 +709,50 @@ ggplot(filtered_data, aes(x = Rate, y = umol.cm2.hr, fill= temp)) +
   facet_wrap(~ wound_status, scales = "free")
 
 
+############### DAY 10 SAMPLE INFO ############################################# #####
+#load in sample information files
+Treatments<- read.csv("Respiration/Data/samp_info.csv")%>% #genotype, wound type, temp
+  mutate(coral_id = as.character(coral_id)) 
+Treatments$temp[Treatments$coral_id == 17] <- "H"
+Treatments$temp[Treatments$coral_id == 5] <- "A"
+Volume<- read.csv("Respiration/Data/day10/chamber_vol_day10.csv")%>% #vol of water in each chamber 
+  mutate(coral_id = as.character(coral_id)) 
+SA<- read.csv("Surface_Area/Output/final_surface_areas.csv")%>% #initial SA of each coral
+  mutate(coral_id = as.character(coral_id))%>%
+  select(coral_id, CSA_cm2)%>%
+  rename(SA = CSA_cm2)
+list_df = list(Treatments, Volume, SA) 
+Sample.Info<-list_df%>%purrr::reduce(left_join, by= 'coral_id')%>%select(-X)%>% #combine data frames by coral_id
+  mutate(file.names.full = paste0(date, "_", temp, "_", coral_id)) #create file.names.full column that matches data file names
+Sample.Info$file.names.full <- paste0(substring(Sample.Info$file.names.full, 1, 8), "_10", substring(Sample.Info$file.names.full, 9)) #add _10 after the 8th character 
+blank_files<-read.csv("Respiration/Data/day10/blanks_only.csv")
+blank_files<-blank_files%>%mutate(blank_files, file.names.full = coral_id)
+Sample.Info <- rbind(Sample.Info, blank_files)
+Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_') # Add '_O2' to the end of each value in the new column
+# View the updated data frame
+View(Sample.Info)
+############### FINAL SAMPLE INFO ############################################## ##### 
+#load in sample information files
+Treatments<- read.csv("Respiration/Data/samp_info.csv")%>% #genotype, wound type, temp
+  mutate(coral_id = as.character(coral_id)) 
+Treatments$temp[Treatments$coral_id == 17] <- "H"
+Treatments$temp[Treatments$coral_id == 5] <- "A"
+Volume<- read.csv("Respiration/Data/final/chamber_vol_final.csv")%>% #vol of water in each chamber 
+  mutate(coral_id = as.character(coral_id)) 
+SA<- read.csv("Surface_Area/Output/final_surface_areas.csv")%>% #initial SA of each coral
+  mutate(coral_id = as.character(coral_id))%>%
+  select(coral_id, CSA_cm2)%>%
+  rename(SA = CSA_cm2)
+list_df = list(Treatments, Volume, SA) 
+Sample.Info<-list_df%>%purrr::reduce(left_join, by= 'coral_id')%>%select(-X)%>% #combine data frames by coral_id
+  mutate(file.names.full = paste0(date, "_", temp, "_", coral_id)) #create file.names.full column that matches data file names
+Sample.Info$file.names.full <- paste0(substring(Sample.Info$file.names.full, 1, 8), "_F", substring(Sample.Info$file.names.full, 9)) #add _10 after the 8th character 
+blank_files<-read.csv("Respiration/Data/final/blanks_only.csv")
+blank_files<-blank_files%>%mutate(blank_files, file.names.full = coral_id)
+Sample.Info <- rbind(Sample.Info, blank_files)
+Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_') # Add '_O2' to the end of each value in the new column
+# View the updated data frame
+View(Sample.Info)
 #######MAKE THIS ONE PRETTY##################
 
 ggplot(filtered_data, aes(x = wound, y = umol.cm2.hr, color=temp)) +
