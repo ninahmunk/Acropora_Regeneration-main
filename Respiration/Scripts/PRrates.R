@@ -138,7 +138,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   
   # rewrite the file everytime... I know this is slow, but it will save the data that is already run
 }
-write.csv(Respiration, 'Output/Respiration/Final/Respiration.csv')  
+write.csv(Respiration, 'Respiration/Output/Respiration/Final/Respiration.csv')  
 
 ############### INITIAL RESPIRATION DATA ANALYSIS ############################## #####
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
@@ -232,7 +232,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   #Save plot prior to and after data thinning to make sure thinning is not too extreme
   rename <- sub(".csv","", file.names[i]) # remove all the extra stuff in the file name
   
-  pdf(paste0("Respiration/Output/Photosynthesis/day10/",rename,"thinning.pdf")) # open the graphics device
+  pdf(paste0("Respiration/Output/Photosynthesis/Final/",rename,"thinning.pdf")) # open the graphics device
   
   par(omi=rep(0.3, 4)) #set size of the outer margins in inches
   par(mfrow=c(1,2)) #set number of rows and columns in multi plot graphic
@@ -279,7 +279,7 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   
   # rewrite the file everytime... I know this is slow, but it will save the data that is already run
 }
-write.csv(Photosynthesis, 'Respiration/Output/Photosynthesis/day10/Photosynthesis.csv')  
+write.csv(Photosynthesis, 'Respiration/Output/Photosynthesis/Final/Photosynthesis.csv')  
 
 ############### INITIAL PHOTOSYNTHESIS DATA ANALYSIS ########################### #####
 
