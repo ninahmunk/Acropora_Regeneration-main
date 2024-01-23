@@ -5,7 +5,7 @@ library(janitor)
 getwd()
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main")
 
-####################### Final Surface Areas (wax dipping) ###################### ##### 
+################### FINAL SA (WAX DIPPING) #####################3############### ##### 
 #wax dipping calibration: calculate surface area of dowels 
 calibration<- read.csv('Data/20230712_wax_calibration.csv')%>%clean_names()%>%
   mutate(wax_weight_g = postwax_weight_g - prewax_weight_g)%>%
@@ -14,7 +14,7 @@ calibration<- read.csv('Data/20230712_wax_calibration.csv')%>%clean_names()%>%
   mutate(height_cm = height_mm / 10)%>%
   mutate(CSA_cm2= ((2*3.14*cal_radius_cm*height_cm) + 3.14*(cal_radius_cm)^2)) #curved surface area (CSA) = 2piRH + piR^2 (one area of circle for top of coral)
 
-# calculate the curve coefficients for slope and intercept to apply as the standard
+#calculate the curve coefficients for slope and intercept to apply as the standard
 stnd.curve <- lm(CSA_cm2~wax_weight_g, data=calibration)
 plot(CSA_cm2~wax_weight_g, data=calibration)
 stnd.curve$coefficients
@@ -34,7 +34,7 @@ range(calibration$CSA_cm2)
 #save the output
 write_csv(smpls, path = "/Users/ninahmunk/Documents/Projects/Regeneration_3/surface_area/output/final_surface_areas.csv")
 
-####################### Initial Surface Area (geometric) ####################### ##### 
+################### INITIAL SA (GEOMETRIC) ##################################### ##### 
 #need to figure out how to add branches together (aka rows of CSA_cm2 together to get total coral SA)
 #curved surface area (CSA) = 2piRH + piR^2 (one area of circle for top of coral)
 
@@ -62,7 +62,7 @@ ggplot(summarized_initial_data)+
 #calculating mean tip diameter to use for removing SA of wound type 2 from initial surface areas
 wound_2_avg_tip_diameter<- mean(data$diameter_tip_mm)
 
-###################ADJUSTING FOR SA REMOVAL BC OF WOUNDING TREATMENTS#################### ##### 
+################### ADJUSTING FOR SA REMOVAL BC OF WOUNDING TREATMENTS ######### ##### 
 #importing data sheet which has height, tip, base measurement for wound type 1
 wound_amount<-read.csv("Surface_Area/Data/wound_type_1_measurements.csv")%>%clean_names()
 #filling in height for wound type 2
