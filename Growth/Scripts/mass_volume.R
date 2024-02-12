@@ -1,9 +1,9 @@
 #bouyant weight to skeletal mass calculations for acropora pulchra frags
 
+install.packages("dplyr")
 library("tidyverse")
 library("readxl")
 library("janitor")
-library("dplyr")
 library("ggplot2")
 library('plyr')
 library('readxl')
@@ -30,11 +30,12 @@ weight_initial<- read_xlsx("Growth/Data/bouyantweight_initial.xlsx", sheet= "raw
   mutate(dry_mass_coral_g= vol_coral_cm3 * density_aragonite)%>%
   
 #select columns I want to use in data visualization
-  select(c(coral_id, dry_mass_coral_g))%>%
+  select(c(coral_id, dry_mass_coral_g))
   
 #rename column of coral mass to 'initial'
-  rename("initial" = "dry_mass_coral_g")
-  
+names(weight_initial)[names(weight_initial) == "dry_mass_coral_g"] <- "initial"
+
+weight_initial<- weight_initial%>%rename(initial = dry_mass_coral_g)
 #option to skip directly to this equation below after calculating density of seawater if you donʻt need to extract coral volume
   #mutate(dry_mass_coral_2= bouyantweight_g / (1 - (density_sw/density_aragonite)))
 
@@ -167,6 +168,17 @@ hr24<- read.csv("Growth/Output/normalized_weight/24hr.csv")
 day10<- read.csv("Growth/Output/normalized_weight/day10.csv")
 final<- read.csv("Growth/Output/normalized_weight/final.csv")
 
+#checking relationship between initial size and final size 
+data<- left_join(initial, final, by = "coral_id")
+ggplot(data, aes(x = initial_g_cm2, y = final_g_cm2)) +
+  geom_point()
+
+#calculate the curve coefficients for slope and intercept to apply as the standard
+stnd.curve <- lm(initial_g_cm2~final_g_cm2, data=data)
+plot(initial_g_cm2~final_g_cm2, data=data)
+stnd.curve$coefficients
+summary(stnd.curve)$r.squared
+
 list_df = list(initial, hr24, day10, final, master)
 all_weights<-list_df%>%reduce(inner_join, by='coral_id')
 
@@ -239,4 +251,13 @@ ggplot(long_growth)+
   facet_wrap(~ temp, scales = "free")
 
 
+########################## DRY MASS X SA ################################ #####
 
+weight<- read.csv("Growth/Output/dry_mass_final.csv")%>%select(coral_id, dry_mass_coral_g)
+view(weight)
+SA<- read.csv("Surface_Area/Output/final_surface_areas.csv")%>%select(coral_id, CSA_cm2)%>%rename(SA = CSA_cm2)
+view(SA)
+data<- left_join(weight, SA, by = "coral_id")
+view(data)
+plot(SA, weight, data = data)
+plot(x=data$dry_mass_coral_g, y=data$SA)

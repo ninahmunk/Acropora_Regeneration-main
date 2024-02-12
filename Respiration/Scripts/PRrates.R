@@ -8,22 +8,19 @@ library("LoLinR")
 library("lubridate")
 library("chron")
 library('plyr')
-library('dplyr')
 library('tidyverse')
 library('stringr')
 library('Rmisc')
 library('janitor')
 library('readxl')
 library("tidyr")
-
-#install.packages("tidyverse")
-#install.packages("tidyr")
-
+library("AICcmodavg")
+library("car")
+library("PMCMRplus")
 
 #Set working directory and the path of all respo data files
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main")
 getwd()
-path.p<-"/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/final/runs"
 
 #make a list of the respo file names inside intial timepoint folder, n=120
 file.names <- list.files(path = path.p, pattern = "csv$")
@@ -35,7 +32,6 @@ Respiration<- data.frame(matrix(NA, nrow=length(file.names.full), ncol=4))
 colnames(Respiration) <- c("coral_id","Intercept", "umol.L.sec","Temp.C")
 Respiration$coral_id <- file.names.full # Insert file names into "coral_id" column 
 View(Respiration)
-
 
 #create photosynthesis data frame
 Photosynthesis<- data.frame(matrix(NA, nrow=length(file.names.full), ncol=4))
@@ -207,15 +203,6 @@ write.csv(Respiration, 'Output/Respiration/Initial/norm_resp_initial.csv')
 # for every file in list calculate O2 uptake or release rate and add the data to the Photo.R dataframe
 for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or release rate and add the data to the Photo.R dataframe
   
-  #find the lines in sample info that have the same file name that is being brought in
-  
-  # Exclude the specific file
-  #if (file.names[i] == "20230605_g1_blank4_O2.csv") {
-   # next  # Skip the rest of the loop and move to the next iteration
- # }
-  
-  #FRow<-which(Sample.Info$file.names.full==strsplit(file.names[i],'.csv'))
-  
   # read in the O2 data one by one
   Photo.Data1 <-read.csv(file.path(path.p,file.names[i]), skip = 1, header=T) # skips the first line
   Photo.Data1  <- Photo.Data1[,c("delta_t","Value","Temp")] #subset columns of interest
@@ -227,7 +214,6 @@ for(i in 1:length(file.names)) { # for every file in list calculate O2 uptake or
   Photo.Data1 <- Photo.Data1 %>% mutate(delta_t=as.numeric(delta_t))%>%filter(delta_t > 10 & delta_t < 25) #start at beginning of light phase (10 minutes in) and stop at 25 min (start of dark phase)
   n<-dim(Photo.Data1)[1] #list length of trimmed data
   Photo.Data1$sec <- seq(1, by = 3, length.out = n) #set seconds by three from start to finish of run in a new column
-  
   
   #Save plot prior to and after data thinning to make sure thinning is not too extreme
   rename <- sub(".csv","", file.names[i]) # remove all the extra stuff in the file name
@@ -1018,7 +1004,7 @@ ggplot(filtered_data, aes(x=wound, y=umol.cm2.hr, color=temp))+
   scale_x_discrete(labels = c("0" = "No Wound", "1" = "Abrasion", "2" = "Fragment"))+
   facet_wrap(~Rate)
 
-####### MAKE THIS ONE PRETTY##################
+############### LILY HELPS ##################################################### #####
 
 ggplot(filtered_data, aes(x = wound, y = umol.cm2.hr, color=temp)) +
   geom_boxplot() +
@@ -1088,22 +1074,21 @@ ggplot(filtered_data, aes(x=temp, y= umol.cm2.hr, color= Rate))+
   geom_boxplot()+
   facet_wrap(~ wound_status, scales = "free")
 
-################ visualizing all that i have so far ####################
+############### GENERATING FULL // CLEANED DATA SET  ########################### #####
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main")
 data1<-read.csv("Respiration/Output/Standardized_FinalSA/All_Rates/rates_initial.csv") 
-data1$timepoint <- "initial"
+data1$timepoint <- "0"
 
 data2<-read.csv("Respiration/Output/Standardized_TimepointSA/All_Rates/rates_24hr.csv")%>%
   rename(file.names.full = coral_id) 
-data2$timepoint <- "24 hours"
+data2$timepoint <- "1"
 
 data3<-read.csv("Respiration/Output/Standardized_FinalSA/All_Rates/rates_day10.csv")%>%
   rename(file.names.full = coral_id)
-data3$timepoint <- "Day 10"
+data3$timepoint <- "10"
 
 data4<- read.csv("Respiration/Output/Standardized_FinalSA/All_Rates/rates_final.csv")
-  data4$timepoint<- "Final"
-
+  data4$timepoint<- "19"
 
 full_data<- rbind(data1, data2, data3, data4)%>%select(-X)%>%
   mutate(wound = as.factor(wound))%>%
@@ -1115,17 +1100,58 @@ view(full_data)
 corals_to_remove <- c(11, 5, 37, 104, 71, 17)
 # Remove rows based on the condition
 full_data_clean <- full_data[!(full_data$coral_num %in% corals_to_remove), ]
-
+full.data.cleaned<- write.csv(full_data_clean, "Respiration/Output/full.data.cleaned.csv")
+############### RESPIRATION FIGURES ############################################ #####
+full_data_clean<- read.csv("Respiration/Output/full.data.cleaned.csv")
 filteredR_data <- full_data_clean %>%
   filter(Rate %in% c("Respiration"))
 filteredR_data$date <- as.factor(filteredR_data$date)
-filteredR_data$timepoint <- factor(filteredR_data$timepoint, levels = c("initial", "24 hours", "Day 10", "Final"))
+filteredR_data$wound <- as.factor(filteredR_data$wound)
+filteredR_data$timepoint <- factor(filteredR_data$timepoint, levels = c("0", "1", "10", "19"))
 
-filteredGP_data <- full_data_clean %>%
-  filter(Rate %in% c("Gross Photosynthesis"))
-filteredGP_data$date <- as.factor(filteredGP_data$date)
-filteredGP_data$timepoint <- factor(filteredGP_data$timepoint, levels = c("initial", "24 hours", "Day 10", "Final"))
 
+summary(filteredR_data)
+
+control_mean <- filteredR_data %>% 
+  filter(temp == "A" & wound == 0) %>% 
+  group_by(timepoint) %>% 
+  reframe(respiration = mean(umol.cm2.hr))
+
+difference_from_control <- filteredR_data %>% 
+  mutate(treatment = paste(temp, wound, sep = "_")) %>% 
+  filter(treatment != "A_0") %>% 
+  left_join(control_mean, by = "timepoint") %>% 
+  mutate(resp_difference = umol.cm2.hr - respiration)
+
+quartz()
+
+ggplot(filteredR_data, aes(x = timepoint, y = umol.cm2.hr, shape = wound, col = temp))+
+  geom_point(size = .5, position = position_dodge(width = 0.5))+
+  stat_summary(fun = mean, geom = "point", size = 5 , position = position_dodge(width = 0.5))+
+  ggtitle("Mean Respiration Rate")+
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Days Post Wounding')
+
+ggplot(filteredR_data, aes(x = timepoint, y = umol.cm2.hr, shape = wound, col = temp))+
+  stat_summary(fun = mean, geom = "point", size = 3 , position = position_dodge(width = 0.7))+
+  ggtitle("Mean Respiration Rate")+
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Days Post Wounding') 
+
+ggplot(difference_from_control, aes(x = timepoint, y = resp_difference, shape = wound, col = temp))+
+  geom_point(aes(x = timepoint, y = resp_difference, shape = wound, col = temp), size = .5, position = position_dodge(width = 0.5))+
+  stat_summary(fun = mean, geom = "point", size = 5 , position = position_dodge(width = 0.5))+
+  ggtitle("Difference in Mean Respiration Rate from Control Corals")+
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Days Post Wounding')
+
+ggplot(difference_from_control, aes(x = timepoint, y = resp_difference, shape = wound, col = temp)) +
+  stat_summary(fun = mean, geom = "point", size = 3, position = position_dodge(width = 0.7)) +
+  ggtitle("Difference in Mean Respiration Rate from Control Corals")+
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Days Post Wounding') 
+  facet_wrap(~temp)
+############### BOX PLOTS ###################################################### #####
 quartz()
 #plots
 ggplot(filteredR_data, aes(x = wound, y = umol.cm2.hr, color = temp)) +
@@ -1149,6 +1175,66 @@ ggplot(filtered_data, aes(x = wound, y = umol.cm2.hr, color = temp))+
   scale_x_discrete(labels = c("0" = "No Wound", "1" = "Fragment", "2" = "Abrasion"))+
   facet_wrap(~Rate)
 
+
+############### PHOTOSYNTHESIS FIGURES ######################################### #####
+full_data_clean<- read.csv("Respiration/Output/full.data.cleaned.csv")
+filteredP_data <- full_data_clean %>%
+  filter(Rate %in% c("Gross Photosynthesis"))
+filteredP_data$date <- as.factor(filteredP_data$date)
+filteredP_data$wound<- as.factor(filteredP_data$wound)
+filteredP_data$timepoint <- factor(filteredP_data$timepoint, levels = c("0", "1", "10", "19"))
+
+control_mean1 <- filteredP_data %>% 
+  filter(temp == "A" & wound == 0) %>% 
+  group_by(timepoint) %>% 
+  reframe(photosynthesis = mean(umol.cm2.hr))
+
+difference_from_control1 <- filteredP_data %>% 
+  mutate(treatment = paste(temp, wound, sep = "_")) %>% 
+  filter(treatment != "A_0") %>%
+  left_join(control_mean1, by = "timepoint") %>% 
+  mutate(photo_difference = umol.cm2.hr - photosynthesis)
+
+ggplot(filteredP_data, aes(x = timepoint, y = umol.cm2.hr, shape = wound, col = temp))+
+  stat_summary(fun = mean, geom = "point", size = 3 , position = position_dodge(width = 0.7))+
+  ggtitle("Mean Photosynthesis Rate") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Days Post Wounding') 
+
+ggplot(difference_from_control1, aes(x = timepoint, y = photo_difference, shape = wound, col = temp))+
+  geom_point(aes(x = timepoint, y = photo_difference, shape = wound, col = temp), size = .5, position = position_dodge(width = 0.5))+
+  stat_summary(fun = mean, geom = "point", size = 5 , position = position_dodge(width = 0.5))+
+  ggtitle("Difference in Mean Photosynthesis Rate from Control Corals")+
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Days Post Wounding')
+
+ggplot(difference_from_control1, aes(x = timepoint, y = photo_difference, shape = wound, col = temp)) +
+  stat_summary(fun = mean, geom = "point", size = 3, position = position_dodge(width = 0.7)) +
+  ggtitle("Difference in Mean Photosynthesis Rate from Control Corals") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Days Post Wounding') +
+  facet_wrap(~temp)
 quartz()
 
+
+
+
+
+
+############### P:R RATIO ###################################################### #####
+full_data_clean<- read.csv("Respiration/Output/full.data.cleaned.csv")
+R <- full_data_clean %>%
+  filter(Rate %in% c("Respiration"))%>%
+  mutate(R.hours = umol.cm2.hr * 23)%>%
+  dplyr::select(-c(X, Rate, umol.cm2.hr, date, file.names.full, chamber_vol, SA))
+
+P<- filteredR_data <- full_data_clean %>%
+  filter(Rate %in% c("Gross Photosynthesis"))%>%
+  mutate(P.hours = umol.cm2.hr * 11)%>%
+  dplyr::select(-c(X, Rate, umol.cm2.hr, date, file.names.full, chamber_vol, SA))
+
+P.R<- R%>%left_join(P, by = c("coral_num", "genotype","timepoint", "wound", "temp", "wound_status"))
+
+
+P.R<- P.R%>%mutate(PR_Ratio = P.hours / R.hours)
 

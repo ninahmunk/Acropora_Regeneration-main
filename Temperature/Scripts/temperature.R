@@ -4,7 +4,7 @@ library(cowplot)
 
 #check working directory and set working directory to folder with raw temperature data 
 getwd()
-setwd("/Users/ninahmunk/Documents/Projects/Regeneration/Temperature/Data")
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Temperature/Data")
 
 #read in raw temperature csv file and change column names for date/time and temperature
 hotsump<-read.csv('21512790_hot_sump_20230703.csv')
@@ -15,6 +15,7 @@ colnames(hotsump)[3] = "temp_c"
 hotsump_date <- tidyr::separate(hotsump, 'date_time',
                                     into = c('longdate', 'time'),
                                     sep= ' ') 
+quartz()
 
 #visualize variation in daily temperatures across each day of the experiment in the hot sump
 hotsump_graph <- ggplot(data=hotsump_date, 
