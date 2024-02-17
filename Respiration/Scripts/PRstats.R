@@ -8,7 +8,7 @@ library("emmeans")
 data<- read.csv("Respiration/Output/full.data.cleaned.csv")
 ############### Filtering data by R and P   #################################### #####
 Rdata <- data%>% 
-  filter(Rate%in% c("Respiration"))%>%
+  filter(Rate%in% c("Respiration"))%>%filter(timepoint%in% c("1"))%>%
   mutate(wound = as.factor(wound), 
          temp = as.factor(temp),
          genotype = as.factor(genotype),
@@ -16,6 +16,8 @@ Rdata <- data%>%
 Rdata$timepoint <- factor(Rdata$timepoint, levels = c("0", "1", "10", "19"))
 # log transform umol.cm2.hr to fit assumptions of normality
 Rdata$log_umol <- log(Rdata$umol.cm2.hr)
+
+ggplot(data = Rdata, aes(x=log(umol.cm2.hr)))+geom_histogram()
 
 Pdata <- data%>% 
   filter(Rate%in% c("Gross Photosynthesis"))%>%
@@ -26,9 +28,11 @@ Pdata <- data%>%
 Pdata$timepoint <- factor(Pdata$timepoint, levels = c("0", "1", "10", "19"))
 # log transform umol.cm2.hr to fit assumptions of normality
 Pdata$log_umol <- log(Pdata$umol.cm2.hr)
+ggplot(data = Pdata, aes(x=log(umol.cm2.hr)))+geom_histogram()
 ############### Linear Mixed Effects Model  #################################### #####
 
-Rmodel <- lmer(log_umol ~ wound + temp + (1 | timepoint), data = Rdata)
+Rmodel <- lmer(log_umol ~ wound + temp , data = Rdata) #(1 | timepoint)
+Rmodel <- lm(log_umol ~ wound + temp , data = Rdata)
 
 summary(Rmodel)
 # checking distribution of residuals
@@ -36,7 +40,7 @@ residuals <- resid(Rmodel)
 hist(residuals)
 qqnorm(residuals)
 qqline(residuals)
-shapiro.test(residuals)
+shapiro.test(residuals) #p= .45
 
 # Visual inspection of heteroscedasticity
 plot(fitted(Rmodel), resid(Rmodel), xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs. Fitted")
@@ -60,6 +64,38 @@ pairwise_results <- pairs(emmeans_results)
 # Display the pairwise comparisons
 print(pairwise_results)
 
+
+
+Pmodel <- lmer(log_umol ~ wound + temp + (1 | timepoint), data = Pdata)
+summary(Pmodel)
+# checking distribution of residuals
+residuals <- resid(Pmodel)
+hist(residuals)
+qqnorm(residuals)
+qqline(residuals)
+shapiro.test(residuals) #low p value
+
+# Visual inspection of heteroscedasticity
+plot(fitted(Rmodel), resid(Rmodel), xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs. Fitted")
+abline(h = 0, col = "red", lty = 2)
+
+# Alternatively, you can use the ggplot2 package for a smoother plot
+ggplot(data.frame(fitted = fitted(Rmodel), residuals = resid(Rmodel)), aes(x = fitted, y = residuals)) +
+  geom_point() +
+  geom_smooth(se = FALSE, method = "loess") +
+  labs(x = "Fitted Values", y = "Residuals", title = "Residuals vs. Fitted")
+
+# run Chi-Squared Type III ANOVA
+anovaIII.results<-Anova(Rmodel, type="III")
+print(anovaIII.results)
+# Obtain  estimated marginal means (EMMs) for all levels of the predictors
+emmeans_results <- emmeans(Rmodel, ~ wound + temp)
+# Display the EMMs
+print(emmeans_results)
+# Pairwise comparisons for the levels within each predictor
+pairwise_results <- pairs(emmeans_results)
+# Display the pairwise comparisons
+print(pairwise_results)
 
 ################## anova w/o model fitting ##################################### #####
 one.way<- aov(umol.cm2.hr ~ wound, data = Rdata)

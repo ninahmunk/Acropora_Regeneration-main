@@ -1,14 +1,13 @@
 #bouyant weight to skeletal mass calculations for acropora pulchra frags
 
-install.packages("dplyr")
 library("tidyverse")
 library("readxl")
 library("janitor")
 library("ggplot2")
 library('plyr')
 library('readxl')
-  library("tidyr")
-#install.packages("tidyr")
+library("tidyr")
+
 
 #set working directory
 getwd()

@@ -1,0 +1,503 @@
+---
+title: "Acropora Regeneration Results"
+author: "Ninah Munk"
+date: "2024-02-14"
+output: html_document
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(dplyr)
+library(janitor)
+library(emmeans)
+library(lme4)
+library(Matrix)
+```
+
+Read in weight data. 
+```{r}
+weight<- read.csv("Growth/Output/normalized_weight/initial.csv") 
+weight2<- read.csv("Growth/Output/normalized_weight/24hr.csv")
+weight3<- read.csv("Growth/Output/normalized_weight/day10.csv")
+weight4<- read.csv("Growth/Output/normalized_weight/final.csv")
+sample.info<- read.csv("Growth/Output/normalized_weight/samp_info.csv")
+```
+
+Here I'm combining post wound coral weight with final coral weight and cleaning the data (i.e., removing any corals which were compromised in some way during the experiment). Then I'm checking the relationship between initial weight and final weight.  
+```{r}
+total.growth<-left_join(weight2, weight4, by = "coral_id")
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29)
+total.growth.clean <- total.growth[!(total.growth$coral_id %in% corals_to_remove), ]
+ggplot(total.growth.clean, aes(x = hr24_g_cm2, y = final_g_cm2)) +
+  geom_point()
+```
+Calculating Growth Rate across the entire duration of the experiment. 
+```{r}
+growth.rate<- total.growth.clean%>%mutate(difference = final_g_cm2 - hr24_g_cm2)%>%mutate(growth.g.cm.d = difference / 19)
+view(growth.rate) #need to check coral #100, has much higher growth rate then everything else 
+growth.rate<- left_join(growth.rate, sample.info, by = "coral_id")
+growth.rate$wound<- as.factor(growth.rate$wound)
+
+ggplot(growth.rate, aes(x = wound, y = growth.g.cm.d, col = temp))+
+  geom_boxplot()+ggtitle("Growth Rate (over entire duration of exp)")
+
+```
+Calculating Growth Rate between timepoints. Day 1 to Day 10 // Day 10 to Day 19
+```{r}
+growth.pt1<-left_join(weight2, weight3, by = "coral_id")
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29)
+growth.pt1.clean <- growth.pt1[!(growth.pt1$coral_id %in% corals_to_remove), ]
+growth.rate.pt1<- growth.pt1.clean%>%mutate(difference = day10_g_cm2 - hr24_g_cm2)%>%mutate(growth.g.cm.d = difference / 9)
+growth.rate.pt1<- left_join(growth.rate.pt1, sample.info, by = "coral_id")
+growth.rate.pt1$wound<- as.factor(growth.rate.pt1$wound)
+
+ggplot(growth.rate.pt1, aes(x = wound, y = growth.g.cm.d, col = temp))+geom_boxplot()+ggtitle("Growth Rate for first 9 days of exp")
+
+growth.pt2<-left_join(weight3, weight4, by = "coral_id")
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29)
+growth.pt2.clean <- growth.pt2[!(growth.pt2$coral_id %in% corals_to_remove), ]
+growth.rate.pt2<- growth.pt2.clean%>%mutate(difference = final_g_cm2 - day10_g_cm2)%>%mutate(growth.g.cm.d = difference / 9)
+growth.rate.pt2<- left_join(growth.rate.pt2, sample.info, by = "coral_id")
+growth.rate.pt2$wound<- as.factor(growth.rate.pt2$wound)
+
+ggplot(growth.rate.pt2, aes(x = wound, y = growth.g.cm.d, col = temp))+geom_boxplot()+ggtitle("Growth Rate for final 9 days of exp")
+```
+
+Load Respiration and Photosynthesis Rates.
+```{r}
+data<- read.csv("Respiration/Output/full.data.cleaned.csv")
+```
+
+
+Filter data frame by Respiration rate and time points
+```{r}
+
+R.0 <- data%>% 
+  filter(Rate%in% c("Respiration"))%>%filter(timepoint%in% c("0"))%>%
+  mutate(wound = as.factor(wound), 
+         temp = as.factor(temp),
+         genotype = as.factor(genotype),
+         date = as.factor(date))
+
+ggplot(data = R.0, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(position = position_dodge(width = 0.2), size = .5)+
+  stat_summary(
+    fun = "mean", 
+    geom = "point", 
+    size = 5, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  ggtitle("Day 0 (pre-wounding)") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Wound Type')
+
+
+R.1 <- data%>% 
+  filter(Rate%in% c("Respiration"))%>%filter(timepoint%in% c("1"))%>%
+  mutate(wound = as.factor(wound), 
+         temp = as.factor(temp),
+         genotype = as.factor(genotype),
+         date = as.factor(date))
+
+ggplot(data = R.1, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(position = position_dodge(width = 0.2), size = .5)+
+  stat_summary(
+    fun = "mean", 
+    geom = "point", 
+    size = 5, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  ggtitle("Day 1 (post-wounding)") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Wound Type')
+
+
+R.10 <- data%>% 
+  filter(Rate%in% c("Respiration"))%>%filter(timepoint%in% c("10"))%>%
+  mutate(wound = as.factor(wound), 
+         temp = as.factor(temp),
+         genotype = as.factor(genotype),
+         date = as.factor(date))
+
+ggplot(data = R.10, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(position = position_dodge(width = 0.2), size = .5)+
+  stat_summary(
+    fun = "mean", 
+    geom = "point", 
+    size = 5, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  ggtitle("Day 10 (post-wounding)") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Wound Type')
+
+
+R.19 <- data%>% 
+  filter(Rate%in% c("Respiration"))%>%filter(timepoint%in% c("10"))%>%
+  mutate(wound = as.factor(wound), 
+         temp = as.factor(temp),
+         genotype = as.factor(genotype),
+         date = as.factor(date))
+
+ggplot(data = R.19, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(position = position_dodge(width = 0.2), size = .5)+
+  stat_summary(
+    fun = "mean", 
+    geom = "point", 
+    size = 5, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  ggtitle("Day 19 (post-wounding)") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Wound Type')
+```
+
+# Julianna's probably dumb code
+
+Get a wide data frame version of respiration rates. For each coral calculate change in rate at each time point from initial rate. 
+
+```{r}
+data %>% 
+  filter(Rate == "Respiration") %>% 
+  select(-X, -date, -file.names.full, -chamber_vol, -SA) %>% 
+  pivot_wider(names_from = timepoint,
+              values_from = umol.cm2.hr) %>% 
+  mutate(Change1.0 = `1` - `0`,
+         Change10.0 = `10`-`0`,
+         Change19.0 = `19`-`0` ) -> wideData
+```
+
+Now going to make this long again for plotting purposes
+
+```{r}
+wideData %>% 
+  pivot_longer(cols = c(Change1.0, Change10.0, Change19.0),
+               names_to = "Time_point",
+               values_to = "ChangeFrom0_respir") -> freakylongData
+```
+
+
+Plot
+
+```{r}
+freakylongData %>% 
+  ggplot(aes(x = as.factor(wound), y = ChangeFrom0_respir, col= temp)) + 
+  geom_boxplot() + 
+  geom_point(position = position_dodge(width = 0.2), size = .5) +
+  facet_wrap(.~Time_point) +
+  geom_hline(yintercept = 0, linetype = "dashed")
+```
+Can we make a dumb model
+
+```{r}
+m1 <- lme(Change1.0 ~ as.factor(wound) + temp + as.factor(wound):temp, random = ~1|genotype, data = wideData)
+  summary(m1)
+  
+m2 <- lmer(Change1.0 ~ as.factor(wound) + temp + (1|genotype), data = wideData)
+  summary(m2)
+  
+AIC(m1, m2) # only thing that matters is which one is lower and to be actually lower, needs to be a difference of 2. Can see model 2 is better 
+```
+
+```{r}
+wideData %>% 
+  rename(T0 = `0`,
+         T1 = `1`,
+         T10 = `10`,
+         T19 = `19`) -> wideData
+
+m1 <- lme(T1 ~ as.factor(wound) + temp + as.factor(wound):temp + T0, random = ~1|genotype, data = wideData)
+  summary(m1)
+
+wideData %>% 
+  ggplot(aes(x = T1, y = T19, color = as.factor(wound))) +
+  geom_point() 
+
+
+freakylongData %>% 
+  ggplot(aes(x = as.factor(wound), y = ChangeFrom0_respir, color = as.factor(temp))) +
+  geom_boxplot() 
+  
+```
+```{r}
+m3 <- glm(Change10.0 ~ as.factor(wound) + temp + as.factor(wound):temp, data = wideData)
+  summary(m3)
+  
+m4 <- glm(Change10.0 ~ as.factor(wound) + temp, data = wideData)
+  summary(m4)
+  
+AIC(m3, m4) # only thing that matters is which one is lower and to be actually lower, needs to be a difference of 2. Can see model 4 is better 
+```
+```{r}
+m5 <- glm(Change19.0 ~ as.factor(wound) + temp + as.factor(wound):temp, data = wideData)
+  summary(m5)
+  
+m6 <- glm(Change19.0 ~ as.factor(wound) + temp, data = wideData)
+  summary(m6)
+  
+AIC(m5, m6) # only thing that matters is which one is lower and to be actually lower, needs to be a difference of 2. Can see model 4 is better 
+```
+
+# Back to Ninah's dope code
+
+
+```{r}
+control_mean <- data %>% 
+  filter(Rate == "Respiration", temp == "A", wound == 0) %>% 
+  group_by(timepoint) %>% 
+  reframe(respiration = mean(umol.cm2.hr))
+
+difference_from_control <- data %>% filter(Rate == "Respiration")%>%
+  mutate(treatment = paste(temp, wound, sep = "_")) %>% 
+  filter(treatment != "A_0") %>% 
+  left_join(control_mean, by = "timepoint") %>% 
+  mutate(resp_difference = umol.cm2.hr - respiration)
+
+
+difference_from_control %>% 
+  ggplot(aes(x = as.factor(wound), y = resp_difference, col= temp)) + 
+  geom_boxplot() + 
+  geom_point(position = position_dodge(width = 0.2), size = .5) +
+  facet_wrap(.~timepoint) +
+  geom_hline(yintercept = 0, linetype = "dashed")
+```
+
+
+
+
+
+
+
+
+
+Analysis of initial (pre-wound) time point 
+```{r}
+#check distribution of data 
+ggplot(data = R.0, aes(x=(umol.cm2.hr)))+geom_histogram()
+ggplot(data = R.0, aes(x=log(umol.cm2.hr)))+geom_histogram()
+# log transform umol.cm2.hr to fit assumptions of normality
+R.0$log_umol <- log(R.0$umol.cm2.hr)
+
+#Rmodel <- lmer(log_umol ~ wound + temp , data = R.0) 
+Rmodel <- lm(umol.cm2.hr ~ wound + temp , data = R.0)
+
+summary(Rmodel)
+# checking distribution of residuals
+residuals <- resid(Rmodel)
+hist(residuals)
+qqnorm(residuals)
+#qqline(residuals)
+shapiro.test(residuals) #p = .83
+plot(Rmodel)
+
+# Visual inspection of heteroscedasticity
+plot(fitted(Rmodel), resid(Rmodel), xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs. Fitted")+abline(h = 0, col = "red", lty = 2)
+
+# Alternatively, you can use the ggplot2 package for a smoother plot
+ggplot(data.frame(fitted = fitted(Rmodel), residuals = resid(Rmodel)), aes(x = fitted, y = residuals)) +
+  geom_point() +
+  geom_smooth(se = FALSE, method = "loess") +
+  labs(x = "Fitted Values", y = "Residuals", title = "Residuals vs. Fitted")
+
+# run Chi-Squared Type III ANOVA
+anovaIII.results<-aov(Rmodel, type="III")
+print(anovaIII.results)
+# Obtain  estimated marginal means (EMMs) for all levels of the predictors
+emmeans_results <- emmeans(Rmodel, ~ wound + temp)
+# Display the EMMs
+print(emmeans_results)
+# Pairwise comparisons for the levels within each predictor
+pairwise_results <- pairs(emmeans_results)
+# Display the pairwise comparisons
+print(pairwise_results)
+
+```
+
+Analysis of Day 1 (24 hrs post-wounding) time point
+```{r}
+#check distribution of data 
+ggplot(data = R.1, aes(x=(umol.cm2.hr)))+geom_histogram()
+ggplot(data = R.1, aes(x=log(umol.cm2.hr)))+geom_histogram()
+# log transform umol.cm2.hr to fit assumptions of normality
+R.1$log_umol <- log(R.1$umol.cm2.hr)
+
+#Rmodel <- lmer(log_umol ~ wound + temp , data = R.0) 
+R.1model <- lm(log_umol ~ wound + temp , data = R.1)
+
+summary(R.1model)
+# checking distribution of residuals
+residuals <- resid(R.1model)
+hist(residuals)
+qqnorm(residuals)
+#qqline(residuals)
+shapiro.test(residuals) #p = .1715
+
+# Visual inspection of heteroscedasticity
+plot(fitted(R.1model), resid(R.1model), xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs. Fitted")+abline(h = 0, col = "red", lty = 2)
+
+# Alternatively, you can use the ggplot2 package for a smoother plot
+ggplot(data.frame(fitted = fitted(R.1model), residuals = resid(R.1model)), aes(x = fitted, y = residuals)) +
+  geom_point() +
+  geom_smooth(se = FALSE, method = "loess") +
+  labs(x = "Fitted Values", y = "Residuals", title = "Residuals vs. Fitted")
+
+# run Chi-Squared Type III ANOVA
+anovaIII.results<-aov(R.1model, type="III")
+print(anovaIII.results)
+# Obtain  estimated marginal means (EMMs) for all levels of the predictors
+emmeans_results <- emmeans(R.1model, ~ wound + temp)
+# Display the EMMs
+print(emmeans_results)
+# Pairwise comparisons for the levels within each predictor
+pairwise_results <- pairs(emmeans_results)
+# Display the pairwise comparisons
+print(pairwise_results)
+```
+
+
+```{r}
+P.0 <- data%>% 
+  filter(Rate%in% c("Gross Photosynthesis"))%>%filter(timepoint%in% c("0"))%>%
+  mutate(wound = as.factor(wound), 
+         temp = as.factor(temp),
+         genotype = as.factor(genotype),
+         date = as.factor(date))
+
+ggplot(data = P.0, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(position = position_dodge(width = 0.2), size = .5)+
+  stat_summary(
+    fun = "mean", 
+    geom = "point", 
+    size = 5, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  ggtitle("Day 0 (pre-wounding)") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Wound Type')
+
+
+P.1 <- data%>% 
+  filter(Rate%in% c("Gross Photosynthesis"))%>%filter(timepoint%in% c("1"))%>%
+  mutate(wound = as.factor(wound), 
+         temp = as.factor(temp),
+         genotype = as.factor(genotype),
+         date = as.factor(date))
+
+ggplot(data = P.1, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(position = position_dodge(width = 0.2), size = .5)+
+  stat_summary(
+    fun = "mean", 
+    geom = "point", 
+    size = 5, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  ggtitle("Day 1 (post-wounding)") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Wound Type')
+
+
+P.10 <- data%>% 
+  filter(Rate%in% c("Gross Photosynthesis"))%>%filter(timepoint%in% c("10"))%>%
+  mutate(wound = as.factor(wound), 
+         temp = as.factor(temp),
+         genotype = as.factor(genotype),
+         date = as.factor(date))
+
+ggplot(data = P.10, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(position = position_dodge(width = 0.2), size = .5)+
+  stat_summary(
+    fun = "mean", 
+    geom = "point", 
+    size = 5, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  ggtitle("Day 10 (post-wounding)") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Wound Type')
+
+
+P.19 <- data%>% 
+  filter(Rate%in% c("Gross Photosynthesis"))%>%filter(timepoint%in% c("10"))%>%
+  mutate(wound = as.factor(wound), 
+         temp = as.factor(temp),
+         genotype = as.factor(genotype),
+         date = as.factor(date))
+
+ggplot(data = P.19, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(position = position_dodge(width = 0.2), size = .5)+
+  stat_summary(
+    fun = "mean", 
+    geom = "point", 
+    size = 5, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  ggtitle("Day 19 (post-wounding)") +
+  ylab('Rate (umol.cm2.hr)') +
+  xlab('Wound Type')
+```
+
+
+
+
+
+```{r}
+ggplot(full.data, aes(x = timepoint, y = fv_fm, shape = wound, col = temp))+
+  geom_point(size = .5, position = position_dodge(width = 0.5))+
+  stat_summary(fun = mean, geom = "point", size = 5 , position = position_dodge(width = 0.5))+
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.5)
+  )+
+  ggtitle("ACR Photosynthetic Efficiency")+
+  ylab('Photosynthetic Efficiency (Fv/Fm)') +
+  xlab('Days')
+```
+
+
+
+

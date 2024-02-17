@@ -539,3 +539,23 @@ ggplot(difference_from_control1, aes(x = timepoint, y = photo_difference, shape 
 quartz()
 
 
+
+############### P:R ########################################################### #####
+ratio<- read.csv("Respiration/Output/PR_Ratio.csv")%>%
+  mutate(wound = as.factor(wound),
+         timepoint = as.factor(timepoint))
+
+ggplot(ratio, aes(x = timepoint, y = PR_Ratio, col = temp))+ #geom_point(position = position_dodge(width = 0.5))+
+  stat_summary(fun = mean, geom = "point", size = 3 , position = position_dodge(width = 0.2))+
+  stat_summary(
+    fun = "mean", 
+    geom = "line", 
+    aes(group = temp), 
+    linetype = "dashed", 
+    col = "black", 
+    position = position_dodge(width = 0.2)
+  )+
+  ggtitle("Mean P:R") +
+  ylab('P:R') +
+  xlab('Days Post Wounding')+
+  facet_wrap("wound")
