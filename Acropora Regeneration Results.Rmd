@@ -68,7 +68,8 @@ ggplot(growth.rate.pt2, aes(x = wound, y = growth.g.cm.d, col = temp))+geom_boxp
 
 Load Respiration and Photosynthesis Rates.
 ```{r}
-data<- read.csv("Respiration/Output/full.data.cleaned.csv")
+data<- read.csv("Respiration/Output/full.data.cleaned.csv") %>% 
+  left_join(weight, by = c("coral_num" = "coral_id"))
 ```
 
 
@@ -151,7 +152,7 @@ ggplot(data = R.10, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(pos
 
 
 R.19 <- data%>% 
-  filter(Rate%in% c("Respiration"))%>%filter(timepoint%in% c("10"))%>%
+  filter(Rate%in% c("Respiration"))%>%filter(timepoint%in% c("19"))%>%
   mutate(wound = as.factor(wound), 
          temp = as.factor(temp),
          genotype = as.factor(genotype),
@@ -181,13 +182,15 @@ Get a wide data frame version of respiration rates. For each coral calculate cha
 
 ```{r}
 data %>% 
-  filter(Rate == "Respiration") %>% 
+  filter(Rate == "Net Photosythesis") %>% 
+  mutate(umol.cm2.hr = umol.cm2.hr * SA) %>% 
   select(-X, -date, -file.names.full, -chamber_vol, -SA) %>% 
   pivot_wider(names_from = timepoint,
               values_from = umol.cm2.hr) %>% 
   mutate(Change1.0 = `1` - `0`,
          Change10.0 = `10`-`0`,
          Change19.0 = `19`-`0` ) -> wideData
+
 ```
 
 Now going to make this long again for plotting purposes
@@ -196,7 +199,10 @@ Now going to make this long again for plotting purposes
 wideData %>% 
   pivot_longer(cols = c(Change1.0, Change10.0, Change19.0),
                names_to = "Time_point",
-               values_to = "ChangeFrom0_respir") -> freakylongData
+               values_to = "ChangeFrom0_respir") %>% 
+  unite("treatment", wound:temp, remove = F) %>% 
+  left_join(weight, by = c("coral_num" = "coral_id")) %>% 
+  rename(initial = `0`) -> freakylongData
 ```
 
 
@@ -204,15 +210,28 @@ Plot
 
 ```{r}
 freakylongData %>% 
-  ggplot(aes(x = as.factor(wound), y = ChangeFrom0_respir, col= temp)) + 
+  ggplot(aes(x = treatment, y = ChangeFrom0_respir)) + 
   geom_boxplot() + 
   geom_point(position = position_dodge(width = 0.2), size = .5) +
-  facet_wrap(.~Time_point) +
-  geom_hline(yintercept = 0, linetype = "dashed")
+  facet_wrap(~Time_point) +
+  geom_hline(yintercept = 0, linetype = "dashed") 
+
+ggplot(freakylongData %>% filter(Time_point == "Change19.0"), 
+       aes(x = initial, y = ChangeFrom0_respir, col = as.factor(wound))) +
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~temp)
 ```
 Can we make a dumb model
 
 ```{r}
+summary(lm(ChangeFrom0_respir ~ treatment*initial_g_cm2.y, data = freakylongData %>% filter(Time_point == ("Change19.0"))))
+
+summary(lm(ChangeFrom0_respir ~ treatment*initial, data = freakylongData %>% filter(Time_point == "Change19.0")))
+
+summary(lm(ChangeFrom0_respir~initial, 
+           data = freakylongData %>% filter(Time_point == "Change19.0" & treatment == "2_H")))
+
 m1 <- lme(Change1.0 ~ as.factor(wound) + temp + as.factor(wound):temp, random = ~1|genotype, data = wideData)
   summary(m1)
   
@@ -301,7 +320,7 @@ ggplot(data = R.0, aes(x=log(umol.cm2.hr)))+geom_histogram()
 # log transform umol.cm2.hr to fit assumptions of normality
 R.0$log_umol <- log(R.0$umol.cm2.hr)
 
-#Rmodel <- lmer(log_umol ~ wound + temp , data = R.0) 
+Rmodel <- lmer(umol.cm2.hr ~ wound + temp + (1|date), data = R.0) 
 Rmodel <- lm(umol.cm2.hr ~ wound + temp , data = R.0)
 
 summary(Rmodel)
@@ -455,7 +474,7 @@ ggplot(data = P.10, aes(x = wound, y = umol.cm2.hr, col= temp)) + geom_point(pos
 
 
 P.19 <- data%>% 
-  filter(Rate%in% c("Gross Photosynthesis"))%>%filter(timepoint%in% c("10"))%>%
+  filter(Rate%in% c("Gross Photosynthesis"))%>%filter(timepoint%in% c("19"))%>%
   mutate(wound = as.factor(wound), 
          temp = as.factor(temp),
          genotype = as.factor(genotype),
