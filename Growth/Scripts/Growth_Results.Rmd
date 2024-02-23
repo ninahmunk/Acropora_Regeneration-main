@@ -22,10 +22,10 @@ library("Matrix")
 
 Read in Raw Data. Combine into one long data frame.
 ```{r}
-weight_initial<- read_xlsx("Growth/Data/bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>%select(-calibration)%>%mutate(timepoint = "initial")
-weight_24hr<- read_xlsx("Growth/Data/bouyantweight_24hr.xlsx", sheet= "raw_data")%>%clean_names()%>%select(-bouyantweight_redo_if_applicable)%>%mutate(timepoint = "postwound")
-weight_day10<- read_xlsx("Growth/Data/bouyantweight_day10.xlsx", sheet= "raw_data")%>%clean_names()%>%select(-bouyantweight_redo_if_applicable)%>%mutate(timepoint = "day10")
-weight_final<- read_xlsx("Growth/Data/bouyantweight_final.xlsx", sheet= "raw_data")%>%clean_names()%>%mutate(timepoint = "final")
+weight_initial<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Data/bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>%select(-calibration)%>%mutate(timepoint = "initial")
+weight_24hr<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Data/bouyantweight_24hr.xlsx", sheet= "raw_data")%>%clean_names()%>%select(-bouyantweight_redo_if_applicable)%>%mutate(timepoint = "postwound")
+weight_day10<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Data/bouyantweight_day10.xlsx", sheet= "raw_data")%>%clean_names()%>%select(-bouyantweight_redo_if_applicable)%>%mutate(timepoint = "day10")
+weight_final<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Data/bouyantweight_final.xlsx", sheet= "raw_data")%>%clean_names()%>%mutate(timepoint = "final")
 
 rbind(weight_initial, weight_24hr, weight_day10, weight_final)%>%select(-date, -group, -temp_c, -salinity_ppt, -salt_temp_c ) -> weight.long
 ```
@@ -51,7 +51,7 @@ ggplot( data = skeletal.mass.clean, aes(x= bouyantweight_g, y = coral_vol))+ geo
  
  ## calculating geometric coral surface areas
 ```{r}
-data<- read.csv("Surface_Area/Data/geometric_SA_initial.csv")%>%clean_names()%>%
+data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Data/geometric_SA_initial.csv")%>%clean_names()%>%
   mutate(branch_height_cm = branch_height_mm / 10) %>%
   mutate(avg_diameter_mm= (diameter_base_mm + diameter_tip_mm) / 2)%>%
   mutate(radius_cm = (avg_diameter_mm/2)/10)%>%
@@ -67,7 +67,7 @@ data<- read.csv("Surface_Area/Data/geometric_SA_initial.csv")%>%clean_names()%>%
 wound_2_avg_tip_diameter<- mean(data$diameter_tip_mm)
 
 # data sheet which has height, tip, base measurement for wound type 1
-wound_amount<-read.csv("Surface_Area/Data/wound_type_1_measurements.csv")%>%clean_names()
+wound_amount<-read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Data/wound_type_1_measurements.csv")%>%clean_names()
 # filling in height for wound type 2
 wound_amount$branch_h_mm <- ifelse(wound_amount$wound == 2 & wound_amount$coral_id %in% unique(wound_amount$coral_id[wound_amount$wound == 2]), 10, wound_amount$branch_h_mm)
 #filling in tip diameter for wound type 2 based on average diameter of wound tips from initial geometric measurements (see above)
@@ -92,7 +92,7 @@ SA_postwound<-initialSA_woundSA%>%mutate(SA_postwound = SA - CSA_cm2)
  ## wax dipping method calibration curve
 ```{r}
 #wax dipping calibration: calculate surface area of dowels 
-calibration<- read.csv('Surface_Area/Data/20230712_wax_calibration.csv')%>%clean_names()%>%
+calibration<- read.csv('/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Data/20230712_wax_calibration.csv')%>%clean_names()%>%
   mutate(wax_weight_g = postwax_weight_g - prewax_weight_g)%>%
   mutate(cal_radius_mm = diameter_mm / 2)%>%
   mutate(cal_radius_cm = cal_radius_mm /10)%>%
@@ -106,7 +106,7 @@ stnd.curve$coefficients
 summary(stnd.curve)$r.squared
 
 #bring in the datasheet with coral samples 
-smpls<- read.csv("Surface_Area/Data/20230712_wax_weights.csv")%>%clean_names()%>%
+smpls<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Data/20230712_wax_weights.csv")%>%clean_names()%>%
 #subtract postwax weight from prewax weight
 mutate(wax_weight_g = postwax_weight_g - prewax_weight_g)
 #Calculate surface area using the standard curve
@@ -125,7 +125,7 @@ stnd.curve1$coefficients
 summary(stnd.curve1)$r.squared #decent rsquared
 
 #bring in sample info to filter out controls
-sample.info<- read.csv("Respiration/Data/samp_info.csv")
+sample.info<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")
 
 # calculate mass of removed coral skeleton
 skeletal.mass%>%select(coral_id, timepoint, dry_mass)%>%pivot_wider(names_from = timepoint,
@@ -219,22 +219,3 @@ ggplot(data = growth.rates.long, aes(x = exp_period, y = growthrate, shape = wou
 
 
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
