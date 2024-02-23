@@ -1,0 +1,240 @@
+---
+title: "ACR_Regen_Growth"
+author: "Ninah Munk"
+date: "2024-02-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library("readxl")
+library("janitor")
+library("ggplot2")
+library('readxl')
+library("dplyr")
+library("emmeans")
+library("lme4")
+library("Matrix")
+```
+
+# Calculating Skeletal Mass from Buoyant Weight 
+
+Read in Raw Data. Combine into one long data frame.
+```{r}
+weight_initial<- read_xlsx("Growth/Data/bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>%select(-calibration)%>%mutate(timepoint = "initial")
+weight_24hr<- read_xlsx("Growth/Data/bouyantweight_24hr.xlsx", sheet= "raw_data")%>%clean_names()%>%select(-bouyantweight_redo_if_applicable)%>%mutate(timepoint = "postwound")
+weight_day10<- read_xlsx("Growth/Data/bouyantweight_day10.xlsx", sheet= "raw_data")%>%clean_names()%>%select(-bouyantweight_redo_if_applicable)%>%mutate(timepoint = "day10")
+weight_final<- read_xlsx("Growth/Data/bouyantweight_final.xlsx", sheet= "raw_data")%>%clean_names()%>%mutate(timepoint = "final")
+
+rbind(weight_initial, weight_24hr, weight_day10, weight_final)%>%select(-date, -group, -temp_c, -salinity_ppt, -salt_temp_c ) -> weight.long
+```
+
+
+```{r}
+weight.long%>% 
+  mutate(density_stopper = (air_weight_g * 0.9965)/(air_weight_g - fresh_weight_g))%>%
+  mutate(density_sw = (air_weight_g - salt_weight_g)/ (air_weight_g / density_stopper))%>%
+  mutate(dry_mass = bouyantweight_g / (1 - (density_sw/density_aragonite)))%>%
+  mutate(coral_vol = (dry_mass / (density_aragonite - density_sw))) -> skeletal.mass
+
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29)
+skeletal.mass.clean <- skeletal.mass[!(skeletal.mass$coral_id %in% corals_to_remove), ]
+  
+# coral dry mass and volume should be positively correlated with buoyant weight
+ggplot( data = skeletal.mass.clean, aes(x= bouyantweight_g, y = dry_mass))+ geom_point()
+ggplot( data = skeletal.mass.clean, aes(x= bouyantweight_g, y = coral_vol))+ geom_point()
+```
+ 
+# Calculating Coral Surface Area 
+ 
+ ## calculating geometric coral surface areas
+```{r}
+data<- read.csv("Surface_Area/Data/geometric_SA_initial.csv")%>%clean_names()%>%
+  mutate(branch_height_cm = branch_height_mm / 10) %>%
+  mutate(avg_diameter_mm= (diameter_base_mm + diameter_tip_mm) / 2)%>%
+  mutate(radius_cm = (avg_diameter_mm/2)/10)%>%
+  mutate(radius_tip_cm = (diameter_tip_mm/2)/10)%>%
+  mutate(CSA_cm2= (2*3.14*(radius_cm*branch_height_cm) + 3.14*(radius_tip_cm)^2))
+
+#add surface areas of branches together 
+  summarized_initial_data <- data %>%
+  group_by(coral_id) %>%
+  summarize(SA = sum(CSA_cm2))
+  
+#calculating mean tip diameter to use for removing SA of wound type 2 from initial surface areas
+wound_2_avg_tip_diameter<- mean(data$diameter_tip_mm)
+
+# data sheet which has height, tip, base measurement for wound type 1
+wound_amount<-read.csv("Surface_Area/Data/wound_type_1_measurements.csv")%>%clean_names()
+# filling in height for wound type 2
+wound_amount$branch_h_mm <- ifelse(wound_amount$wound == 2 & wound_amount$coral_id %in% unique(wound_amount$coral_id[wound_amount$wound == 2]), 10, wound_amount$branch_h_mm)
+#filling in tip diameter for wound type 2 based on average diameter of wound tips from initial geometric measurements (see above)
+wound_amount$tip_d_mm <- ifelse(wound_amount$wound == 2 & wound_amount$coral_id %in% unique(wound_amount$coral_id[wound_amount$wound == 2]), wound_2_avg_tip_diameter, wound_amount$tip_d_mm)
+# make all other NAs in the data frame zero 
+wound_amount[is.na(wound_amount)] <- 0
+
+data2<- wound_amount%>%
+  mutate(branch_height_cm = branch_h_mm / 10) %>%
+  mutate(avg_diameter_mm= (base_d_mm + tip_d_mm) / 2)%>%
+  mutate(radius_cm = (avg_diameter_mm/2)/10)%>%
+  mutate(radius_tip_cm = (tip_d_mm/2)/10)%>%
+  mutate(CSA_cm2= (2*3.14*(radius_cm*branch_height_cm) + 3.14*(radius_tip_cm)^2))
+
+SA_to_subtract<-data2%>%select(coral_id, wound, CSA_cm2)
+
+initialSA_woundSA<- left_join(summarized_initial_data, SA_to_subtract, by= 'coral_id')
+
+SA_postwound<-initialSA_woundSA%>%mutate(SA_postwound = SA - CSA_cm2)
+```
+
+ ## wax dipping method calibration curve
+```{r}
+#wax dipping calibration: calculate surface area of dowels 
+calibration<- read.csv('Surface_Area/Data/20230712_wax_calibration.csv')%>%clean_names()%>%
+  mutate(wax_weight_g = postwax_weight_g - prewax_weight_g)%>%
+  mutate(cal_radius_mm = diameter_mm / 2)%>%
+  mutate(cal_radius_cm = cal_radius_mm /10)%>%
+  mutate(height_cm = height_mm / 10)%>%
+  mutate(CSA_cm2= ((2*3.14*cal_radius_cm*height_cm) + 3.14*(cal_radius_cm)^2)) #curved surface area (CSA) = 2piRH + piR^2 (one area of circle for top of coral)
+
+#calculate the curve coefficients for slope and intercept to apply as the standard
+stnd.curve <- lm(CSA_cm2~wax_weight_g, data=calibration)
+plot(CSA_cm2~wax_weight_g, data=calibration)
+stnd.curve$coefficients
+summary(stnd.curve)$r.squared
+
+#bring in the datasheet with coral samples 
+smpls<- read.csv("Surface_Area/Data/20230712_wax_weights.csv")%>%clean_names()%>%
+#subtract postwax weight from prewax weight
+mutate(wax_weight_g = postwax_weight_g - prewax_weight_g)
+#Calculate surface area using the standard curve
+smpls$SA <- stnd.curve$coefficients[2] * smpls$wax_weight_g + stnd.curve$coefficients[1]
+
+# Can we create another standard curve using final wax weights and final coral skeletal mass
+skeletal.mass%>%filter(timepoint == "final")%>%select(coral_id, dry_mass)-> final.mass
+
+# combine wax weight and coral weight 
+smpls%>%select(coral_id, wax_weight_g)%>%
+  left_join(final.mass, by = "coral_id")-> waxXmass
+
+stnd.curve1 <- lm(dry_mass~wax_weight_g, data=waxXmass)
+plot(dry_mass~wax_weight_g, data=waxXmass)
+stnd.curve1$coefficients
+summary(stnd.curve1)$r.squared #decent rsquared
+
+#bring in sample info to filter out controls
+sample.info<- read.csv("Respiration/Data/samp_info.csv")
+
+# calculate mass of removed coral skeleton
+skeletal.mass%>%select(coral_id, timepoint, dry_mass)%>%pivot_wider(names_from = timepoint,
+              values_from = dry_mass)%>%mutate(removed.mass = initial - postwound)%>%left_join(sample.info, by = "coral_id")%>%filter(!wound == 0) -> removed.mass
+
+# lets check that final SA is positively correlated to final weight 
+smpls%>%left_join(final.mass, by = "coral_id")-> final.SAXmass
+ggplot(data = final.SAXmass, aes(x = dry_mass, y = SA))+ geom_point()
+
+stnd.curve2 <- lm(dry_mass~SA, data=final.SAXmass)
+plot(dry_mass~SA, data=final.SAXmass)
+stnd.curve2$coefficients
+summary(stnd.curve2)$r.squared #decent rsquared
+
+```
+ Corals seem to have gained a good amount of mass after initial measurements so this wont work. Lets standardize all postwound, day 10, and final measurements by final SA derived by wax dip method but lets subtract geometric SA of wounds from it for the postwound measurements 
+
+```{r}
+smpls%>%left_join(SA_to_subtract, by = "coral_id")%>%mutate(postwound.SA = SA - CSA_cm2)%>%select(coral_id, postwound.SA) -> postwound.SA
+```
+
+Combine Initial, Postwound, and Final Surface Areas into one dataframe
+```{r}
+summarized_initial_data%>%mutate(timepoint = "initial") -> SA.1
+postwound.SA%>%rename(SA = postwound.SA)%>%mutate(timepoint = "postwound") -> SA.2
+smpls%>%select(coral_id, SA)%>%mutate(timepoint = "day10") -> SA.3
+smpls%>%select(coral_id, SA)%>%mutate(timepoint = "final") -> SA.4
+
+
+rbind(SA.1, SA.2, SA.3, SA.4) -> SA.long
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29)
+SA.long.clean <- SA.long[!(SA.long$coral_id %in% corals_to_remove), ]
+
+```
+
+# Normalize growth by Coral Surface Area
+
+```{r}
+skeletal.mass.clean%>%select(coral_id, timepoint, dry_mass)%>%pivot_wider(names_from = timepoint,
+              values_from = dry_mass)%>%
+  rename(initial_weight = initial,
+         day1_weight = postwound,
+         day10_weight = day10, 
+         final_weight = final) -> skeletal.mass.clean.wide
+
+SA.long.clean%>%pivot_wider(names_from = timepoint,
+              values_from = SA)%>%
+  rename(initial.SA = initial,
+         day1.SA = postwound,
+         day10.SA = day10, 
+         final.SA = final) -> SA.clean.wide
+
+SA.clean.wide%>%left_join(skeletal.mass.clean.wide, by = "coral_id") -> mass.SA
+
+mass.SA%>%mutate(initial.weight.norm = initial_weight / initial.SA,
+                 day1.weight.norm = day1_weight / day1.SA,
+                 day10.weight.norm = day10_weight / day10.SA, 
+                 final.weight.norm = final_weight / final.SA) -> mass.SA.normal
+```
+
+# Calculate Growth Rates 
+
+```{r}
+growth.rates<- mass.SA.normal%>%mutate(full.growth.rate = ((final.weight.norm - day1.weight.norm)*1000)/19,
+                                      pt1.growth.rate = ((day10.weight.norm - day1.weight.norm)*1000)/19,
+                                      pt2.growth.rate = ((final.weight.norm - day10.weight.norm)*1000)/19)%>%left_join(sample.info, by = "coral_id")
+growth.rates$wound<- as.factor(growth.rates$wound)
+
+ggplot(growth.rates, aes(x = wound, y = full.growth.rate, col = temp))+
+  geom_boxplot()+ggtitle("Growth Rate (over entire duration of exp)")
+
+# checking to see if initial coral size was correlated with growth rate 
+ggplot(growth.rates, aes (x=initial_weight, y = full.growth.rate))+ geom_point()
+ggplot(growth.rates, aes (x=day1_weight, y = full.growth.rate))+ geom_point()
+
+summary(growth.rates)
+#make data long again
+growth.rates %>% 
+  pivot_longer(cols = c(pt1.growth.rate, pt2.growth.rate),
+               names_to = "exp_period",
+               values_to = "growthrate")-> growth.rates.long
+
+ggplot(data = growth.rates.long, aes(x = exp_period, y = growthrate, shape = wound))+ 
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
+  facet_wrap(~temp)+ 
+  theme_classic()
+
+```
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

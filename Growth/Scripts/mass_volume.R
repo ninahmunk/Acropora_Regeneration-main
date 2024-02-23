@@ -4,14 +4,20 @@ library("tidyverse")
 library("readxl")
 library("janitor")
 library("ggplot2")
-library('plyr')
 library('readxl')
-library("tidyr")
+library("dplyr")
+
+#corrected as of 2/23/23
+weight_initial<- read_xlsx("Growth/Data/bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>% 
+  mutate(density_stopper = (air_weight_g * 0.9965)/(air_weight_g - fresh_weight_g))%>%
+  mutate(density_sw = (air_weight_g - salt_weight_g)/ (air_weight_g / density_stopper))%>%
+  mutate(dry_mass = bouyantweight_g / (1 - (density_sw/density_aragonite)))%>%
+  mutate(coral_vol = (dry_mass / (density_aragonite - density_sw)))
+  
+ggplot( data = weight_initial, aes(x= bouyantweight_g, y = dry_mass))+ geom_point()
+ggplot( data = weight_initial, aes(x= bouyantweight_g, y = coral_vol))+ geom_point()
 
 
-#set working directory
-getwd()
-setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main")
 ################### Initial Skeletal Mass ###################################### ##### 
 #load data 
 weight_initial<- read_xlsx("Growth/Data/bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>% 
