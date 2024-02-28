@@ -89,6 +89,13 @@ initialSA_woundSA<- left_join(summarized_initial_data, SA_to_subtract, by= 'cora
 SA_postwound<-initialSA_woundSA%>%mutate(SA_postwound = SA - CSA_cm2)
 ```
 
+try making SA removed equal for all fragmented corals
+```{r}
+#mean(SA_to_subtract$CSA_cm2[SA_to_subtract$wound ==1])
+#SA_to_subtract$CSA_cm2[SA_to_subtract$wound == 1] <- 1.07
+```
+
+
  ## wax dipping method calibration curve
 ```{r}
 #wax dipping calibration: calculate surface area of dowels 
@@ -141,7 +148,22 @@ stnd.curve2$coefficients
 summary(stnd.curve2)$r.squared #decent rsquared
 
 ```
- Corals seem to have gained a good amount of mass after initial measurements so this wont work. Lets standardize all postwound, day 10, and final measurements by final SA derived by wax dip method but lets subtract geometric SA of wounds from it for the postwound measurements 
+ 
+ SA's derived geometrically are positively correlated to wax dip derived SA
+```{r}
+SA_postwound%>%select(coral_id, SA, SA_postwound)%>%rename(SA_initial = SA)%>%left_join(smpls%>%select(coral_id, SA)%>%rename(SA_final = SA))-> all.SA
+
+ggplot(data = all.SA, aes(x= SA_initial, y = SA_final))+geom_point()
+ggplot(data = all.SA, aes(x= SA_postwound, y = SA_final))+geom_point()
+
+stnd.curve3 <- lm(SA_initial~SA_final, data=all.SA)
+plot(SA_initial~SA_final, data=all.SA)
+stnd.curve3$coefficients
+summary(stnd.curve3)$r.squared
+
+```
+ 
+Corals weight more at day 1 post wounding than they do at initial weighing (i.e., Corals grew after initial weighing so subtracting post wound weight from initial weight to get weight of removed mass wont work). This makes sense bc corals had high growth rates before exp started (see below growth rates of unwounded corals pre start of experiment). Lets standardize all postwound, day 10, and final measurements by final SA derived by wax dip method, but lets subtract geometrically calculated SA of wounds from it for standardizing the postwound(day1) measurements. 
 
 ```{r}
 smpls%>%left_join(SA_to_subtract, by = "coral_id")%>%mutate(postwound.SA = SA - CSA_cm2)%>%select(coral_id, postwound.SA) -> postwound.SA
@@ -163,7 +185,6 @@ SA.long.clean <- SA.long[!(SA.long$coral_id %in% corals_to_remove), ]
 ```
 
 # Normalize growth by Coral Surface Area
-
 ```{r}
 skeletal.mass.clean%>%select(coral_id, timepoint, dry_mass)%>%pivot_wider(names_from = timepoint,
               values_from = dry_mass)%>%
@@ -181,18 +202,82 @@ SA.long.clean%>%pivot_wider(names_from = timepoint,
 
 SA.clean.wide%>%left_join(skeletal.mass.clean.wide, by = "coral_id") -> mass.SA
 
-mass.SA%>%mutate(initial.weight.norm = initial_weight / initial.SA,
-                 day1.weight.norm = day1_weight / day1.SA,
-                 day10.weight.norm = day10_weight / day10.SA, 
-                 final.weight.norm = final_weight / final.SA) -> mass.SA.normal
+# mass.SA%>%mutate(initial.weight.norm = initial_weight / initial.SA,
+#                  day1.weight.norm = day1_weight / day1.SA,
+#                  day10.weight.norm = day10_weight / day10.SA, #this is just final SA, lol
+#                  final.weight.norm = final_weight / final.SA) -> mass.SA.normal
+
+mass.SA%>%mutate(full.growth = ((final_weight - day1_weight)*1000),
+                 pt1.growth = ((day10_weight - day1_weight)*1000),
+                 pt2.growth = ((final_weight - day10_weight)*1000)) -> growth
+
+growth%>%mutate(full.growth.rate = (full.growth / final.SA) / 19,
+                pt1.growth.rate = (pt1.growth / day1.SA) / 9,
+                pt2.growth.rate = (pt2.growth / final.SA) / 9)%>%left_join(sample.info, by = "coral_id") -> growth.normal
+growth.normal$wound<- as.factor(growth.normal$wound)
+
+ggplot(growth.normal, aes(x = wound, y = full.growth.rate, col = temp))+
+  geom_boxplot()+ggtitle("Growth Rate (over entire duration of exp)")
+
+# checking to see if initial coral size was correlated with growth rate 
+ggplot(growth.normal, aes (x=initial_weight, y = full.growth.rate))+ geom_point()
+ggplot(growth.normal, aes (x=day1_weight, y = full.growth.rate))+ geom_point()
+
+summary(growth.normal)
+#make data long again
+growth.normal %>% 
+  pivot_longer(cols = c(pt1.growth.rate, pt2.growth.rate),
+               names_to = "exp_period",
+               values_to = "growthrate")-> growth.normal.long
+
+ggplot(data = growth.normal.long, aes(x = exp_period, y = growthrate, shape = wound))+ 
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
+  facet_wrap(~temp)+ 
+  theme_classic()+
+  ggtitle("standardized specific to timepoint, growth = mg/cm2/day")
+
+
 ```
 
 # Calculate Growth Rates 
 
+## Growth Rate standardized by timepoint specific SA (i.e., postwound(day1) = final SA - geometric wound SA) 
 ```{r}
-growth.rates<- mass.SA.normal%>%mutate(full.growth.rate = ((final.weight.norm - day1.weight.norm)*1000)/19,
-                                      pt1.growth.rate = ((day10.weight.norm - day1.weight.norm)*1000)/19,
-                                      pt2.growth.rate = ((final.weight.norm - day10.weight.norm)*1000)/19)%>%left_join(sample.info, by = "coral_id")
+growth.rates1<- mass.SA.normal%>%mutate(full.growth.rate = ((final.weight.norm - day1.weight.norm)*1000)/19,
+                                      pt1.growth.rate = ((day10.weight.norm - day1.weight.norm)*1000)/9,
+                                      pt2.growth.rate = ((final.weight.norm - day10.weight.norm)*1000)/9)%>%left_join(sample.info, by = "coral_id")
+growth.rates1$wound<- as.factor(growth.rates1$wound)
+
+ggplot(growth.rates1, aes(x = wound, y = full.growth.rate, col = temp))+
+  geom_boxplot()+ggtitle("Growth Rate (over entire duration of exp)")
+
+# checking to see if initial coral size was correlated with growth rate 
+ggplot(growth.rates1, aes (x=initial_weight, y = full.growth.rate))+ geom_point()
+ggplot(growth.rates1, aes (x=day1_weight, y = full.growth.rate))+ geom_point()
+
+summary(growth.rates1)
+#make data long again
+growth.rates1 %>% 
+  pivot_longer(cols = c(pt1.growth.rate, pt2.growth.rate),
+               names_to = "exp_period",
+               values_to = "growthrate")-> growth.rates.long1
+
+ggplot(data = growth.rates.long1, aes(x = exp_period, y = growthrate, shape = wound))+ 
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
+  facet_wrap(~temp)+ 
+  theme_classic()+
+  ggtitle("standardized specific to timepoint, growth = mg/cm2/day")
+
+
+```
+
+## Growth Rate not standardized by SA
+```{r}
+growth.rates<- mass.SA%>%mutate(full.growth.rate = ((final_weight - day1_weight)*1000)/19,
+                                      pt1.growth.rate = ((day10_weight - day1_weight)*1000)/9,
+                                      pt2.growth.rate = ((final_weight - day10_weight)*1000)/9)%>%left_join(sample.info, by = "coral_id")
 growth.rates$wound<- as.factor(growth.rates$wound)
 
 ggplot(growth.rates, aes(x = wound, y = full.growth.rate, col = temp))+
@@ -213,9 +298,84 @@ ggplot(data = growth.rates.long, aes(x = exp_period, y = growthrate, shape = wou
   stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
   stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
   facet_wrap(~temp)+ 
-  theme_classic()
+  theme_classic()+
+  ggtitle("not standardized growth = mg/day")
+```
+## standardized by final SA only 
+```{r}
+# lets try standardizing postwound/day 1 weights by final SA
+mass.SA%>%mutate(initial.weight.norm = initial_weight / initial.SA,
+                 day1.weight.norm = day1_weight / final.SA,
+                 day10.weight.norm = day10_weight / final.SA, #this is just final SA, lol
+                 final.weight.norm = final_weight / final.SA) -> mass.SA.normal.finalSA
+
+# growth rates standardized by final SAs 
+growth.rates2<- mass.SA.normal.finalSA%>%mutate(full.growth.rate = ((final.weight.norm - day1.weight.norm)*1000)/19,
+                                      pt1.growth.rate = ((day10.weight.norm - day1.weight.norm)*1000)/9,
+                                      pt2.growth.rate = ((final.weight.norm - day10.weight.norm)*1000)/9)%>%left_join(sample.info, by = "coral_id")
+growth.rates2$wound<- as.factor(growth.rates$wound)
+
+ggplot(growth.rates2, aes(x = wound, y = full.growth.rate, col = temp))+
+  geom_boxplot()+ggtitle("Growth Rate (over entire duration of exp)")
+
+# checking to see if initial coral size was correlated with growth rate 
+ggplot(growth.rates2, aes (x=initial.weight.norm, y = full.growth.rate))+ geom_point()
+ggplot(growth.rates2, aes (x=day1.weight.norm, y = full.growth.rate))+ geom_point()
+
+summary(growth.rates2)
+#make data long again
+growth.rates2 %>% 
+  pivot_longer(cols = c(pt1.growth.rate, pt2.growth.rate),
+               names_to = "exp_period",
+               values_to = "growthrate")-> growth.rates.long2
+
+ggplot(data = growth.rates.long2, aes(x = exp_period, y = growthrate, shape = wound))+
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
+  facet_wrap(~temp)+ 
+  theme_classic()+
+  ggtitle("standardized by final SAs, growth = mg/cm2/day")
 
 ```
 
+# Growth Rate of control corals only, starting from initial timepoint 
+```{r}
+mass.SA%>%mutate(initial.weight.norm = initial_weight / final.SA,
+                 day1.weight.norm = day1_weight / final.SA,
+                 day10.weight.norm = day10_weight / final.SA, #this is just final SA, lol
+                 final.weight.norm = final_weight / final.SA) -> mass.SA.normal.controlsonly
+growth.rates3<- mass.SA.normal.controlsonly%>%mutate(full.growth.rate = ((final.weight.norm - initial.weight.norm)*1000)/19,
+                                      pt1.growth.rate = ((day1.weight.norm - initial.weight.norm)*1000)/7,
+                                      pt2.growth.rate = ((day10.weight.norm - day1.weight.norm)*1000)/9,
+                                      pt3.growth.rate = ((final.weight.norm - day10.weight.norm)*1000)/9)%>%left_join(sample.info, by = "coral_id")%>%filter(wound == 0)
+growth.rates3$wound<- as.factor(growth.rates3$wound)
 
+ggplot(growth.rates3, aes(x = wound, y = full.growth.rate, col = temp))+
+  geom_boxplot()+ggtitle("Growth Rate over entire exp (non-wounded corals only), growth = mg/cm2/day")
 
+# checking to see if initial coral size was correlated with growth rate 
+ggplot(growth.rates3, aes (x=initial.weight.norm, y = full.growth.rate))+ geom_point()
+ggplot(growth.rates3, aes (x=day1.weight.norm, y = full.growth.rate))+ geom_point()
+
+summary(growth.rates3)
+#make data long again
+growth.rates3 %>% 
+  pivot_longer(cols = c(pt1.growth.rate, pt2.growth.rate, pt3.growth.rate),
+               names_to = "exp_period",
+               values_to = "growthrate")%>%filter(!coral_id == 32)-> growth.rates.long3 #filtered out coral 32 here bc it has irrationally large growth rate from initial to day 1 (maybe i switched it out for another coral?)
+
+ggplot(data = growth.rates.long3, aes(x = exp_period, y = growthrate))+ geom_boxplot()+
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
+  theme_classic()+
+  ggtitle("Non-wounded corals only standardized by final SAs, growth = mg/cm2/day")
+
+ggplot(data = growth.rates.long3, aes(x = exp_period, y = growthrate))+ geom_point()+
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
+  facet_wrap(~temp)+ 
+  theme_classic()+
+  ggtitle("Non-wounded corals only, standardized by final SAs, growth = mg/cm2/day")
+
+```
+Corals were 
