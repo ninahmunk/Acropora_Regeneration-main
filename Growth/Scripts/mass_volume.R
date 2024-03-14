@@ -7,7 +7,8 @@ library("dplyr")
 library("ggplot2")
 library('plyr')
 library('readxl')
-  library("tidyr")
+library("tidyr")
+
 #install.packages("tidyr")
 
 #set working directory
@@ -15,6 +16,9 @@ getwd()
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main")
 ################### Initial Skeletal Mass ###################################### ##### 
 #load data 
+
+#weight_initial<- read.csv("Growth/Data/bouyantweight_initial.csv")
+
 weight_initial<- read_xlsx("Growth/Data/bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>% 
   
 #add column to calculate density of the glass stopper, 0.9965 is the density of freshwater
