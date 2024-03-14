@@ -1,0 +1,361 @@
+---
+title: "Respirometry Analysis"
+author: "Ninah Munk"
+date: "2024-03-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, root.dir = "C:/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(janitor)
+library(emmeans)
+library(lme4)
+library(Matrix)
+library(readxl)
+
+```
+
+# Initial sample info
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
+Treatments<- read.csv("Respiration/Data/initial/samp_info.csv") #genotype, wound type, temp
+Volume<- read.csv("Respiration/Data/initial/chamber_vol.csv") #vol of water in each chamber 
+SA<- read.csv("Surface_Area/Output/initial_surface_areas.csv")%>% #initial SA of each coral
+  mutate(coral_id = as.character(coral_id)) 
+list_df = list(Treatments, Volume, SA) 
+Sample.Info<-list_df%>%purrr::reduce(left_join, by= 'coral_id') #combine all info by coral id 
+# Add '_g1', '_g2', '_g3' based on values in the 'date' column
+Sample.Info$file.names.full <- ifelse(Sample.Info$date == '20230605', paste(Sample.Info$date, 'g1', sep = '_'),
+                                 ifelse(Sample.Info$date == '20230606', paste(Sample.Info$date, 'g2', sep = '_'),
+                                        ifelse(Sample.Info$date == '20230607', paste(Sample.Info$date, 'g3', sep = '_'),
+                                               as.character(Sample.Info$coral_id))))  # Convert coral_id to character for NA in 'date'
+rows_to_modify <- 109:120
+Sample.Info$coral_id[rows_to_modify] <- substr(Sample.Info$coral_id[rows_to_modify], 10, nchar(Sample.Info$coral_id[rows_to_modify])) # This removes the first 9 characters from rows 109-118 in the new_column
+Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, Sample.Info$coral_id, sep = "_") #creating new column to combine new column and coral_id separated by _
+Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_') # Add '_O2' to the end of each value in the new column
+
+```
+
+# Load in Initial Respiration Rates, join with Initial Sample Info, assign blank rates to each coral ID
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
+
+#renaming and reordering columns in sample info and then combining it with respiration df based on coral id
+names(Sample.Info)[2] <- "coral_num"
+names(Sample.Info)[8] <- "coral_id"
+Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
+
+#read in Photo.R file so dont need to run entire for loop again
+Respiration <- read.csv('Output/Respiration/Initial/Respiration.csv')%>% select(-X)
+Respiration$coral_id[9]='20230605_g1_25_O2'
+
+Respiration<-left_join(Respiration, Sample.Info, by='coral_id')%>%
+  rename(surf.area.cm2=SA)
+#Convert sample volume to L
+Respiration$chamber_vol <- Respiration$chamber_vol/1000 #calculate volume
+#Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
+Respiration$umol.sec <- Respiration$umol.L.sec*Respiration$chamber_vol
+
+# Extract rows with blank data from respiration data frame
+blankrows <- c(37, 77, 117, 38, 78, 118, 39, 79, 119, 40, 80, 120)
+blank_rates <- Respiration[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
+
+Respiration<- drop_na(Respiration)%>%mutate(coral_num = as.numeric(coral_num))
+
+blanks<-read.csv('Data/initial/blanks.csv')%>%
+  select(-'X')%>%
+  rename(blank_id = coral_id)
+
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE)
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+
+Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
+Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
+
+#### Normalize to SA (surface area)
+
+#Calculate net R
+Respiration$umol.cm2.hr <- (Respiration$umol.sec.corr*3600)/Respiration$surf.area.cm2 #mmol cm-2 hr-1
+# Take the absolute (positive) value of the 'umol.cm2.hr' column
+Respiration<- Respiration%>%
+  mutate(umol.cm2.hr = abs(umol.cm2.hr))%>%
+  mutate(genotype = as.factor(genotype))
+
+# log the rates
+Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
+
+#export normalized rates
+#write.csv(Respiration, 'Output/Respiration/Initial/norm_resp_initial.csv')
+
+read.csv("Output/Standardized_TimepointSA/Respiration/norm_resp_initial.csv") -> R1
+```
+# 24 hour sample info
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
+#load in sample information files
+Treatments<- read.csv("Respiration/Data/samp_info.csv")%>% #genotype, wound type, temp
+  mutate(coral_id = as.character(coral_id)) 
+Treatments$temp[Treatments$coral_id == 17] <- "H"
+Treatments$temp[Treatments$coral_id == 5] <- "A"
+Volume<- read.csv("Respiration/Data/24hours/chamber_vol_24hrs.csv")%>% #vol of water in each chamber 
+  mutate(coral_id = as.character(coral_id)) 
+SA<- read.csv("Surface_Area/Output/post_wound_surface_areas.csv")%>% #initial SA of each coral
+  mutate(coral_id = as.character(coral_id))%>%
+  rename(SA = SA_post_wound)
+list_df = list(Treatments, Volume, SA) 
+Sample.Info<-list_df%>%purrr::reduce(left_join, by= 'coral_id')%>% #combine data frames by coral_id
+  mutate(file.names.full = paste0(date, "_", temp, "_", coral_id)) #create file.names.full column that matches data file names
+Sample.Info$file.names.full <- paste0(substring(Sample.Info$file.names.full, 1, 8), "_24", substring(Sample.Info$file.names.full, 9)) #add _24 after the 8th character 
+blank_files<-read.csv("Respiration/Data/24hours/blanks_only.csv")
+blank_files<-blank_files%>%mutate(blank_files, file.names.full = coral_id)
+Sample.Info <- rbind(Sample.Info, blank_files)
+Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_') # Add '_O2' to the end of each value in the new column
+
+```
+# Load in 24 hr Respiration Rates, join with 24 hr Sample Info, assign blank rates to each coral ID
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
+
+#renaming and reordering columns in sample info and then combining it with respiration df based on coral id
+names(Sample.Info)[2] <- "coral_num"
+names(Sample.Info)[8] <- "coral_id"
+Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
+
+#read in Photo.R file so dont need to run entire for loop again
+Respiration <- read.csv('Output/Respiration/24hours/Respiration.csv')%>% select(-X)
+Respiration$coral_id <- gsub(" ", "", Respiration$coral_id)
+Respiration<-left_join(Respiration, Sample.Info, by='coral_id')%>%
+  rename(surf.area.cm2=SA)
+#Convert sample volume to L
+Respiration$chamber_vol <- Respiration$chamber_vol/1000 #calculate volume
+#Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
+Respiration$umol.sec <- Respiration$umol.L.sec*Respiration$chamber_vol
+
+# Extract rows with blank data from respiration data frame
+blankrows <- c(99, 100, 119, 120, 79, 80, 60, 50, 40, 39, 19, 20)
+blank_rates <- Respiration[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
+
+Respiration<- drop_na(Respiration)%>%mutate(coral_num = as.numeric(coral_num))
+
+blanks<-read.csv('Data/24hours/blanks.csv')%>%
+  rename("blank_id" = "coral_id")
+
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE)
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+
+Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
+Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
+
+#### Normalize to SA (surface area)
+
+#Calculate net R
+Respiration$umol.cm2.hr <- (Respiration$umol.sec.corr*3600)/Respiration$surf.area.cm2 #mmol cm-2 hr-1
+# Take the absolute (positive) value of the 'umol.cm2.hr' column
+Respiration<- Respiration%>%
+  mutate(umol.cm2.hr = abs(umol.cm2.hr))%>%
+  mutate(genotype = as.factor(genotype))
+
+# log the rates
+Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
+
+#export normalized rates
+#write.csv(Respiration, 'Output/Standardized_TimepointSA/Respiration/norm_resp_24.csv')
+```
+
+# read in day 10 sample info
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
+#load in sample information files
+Treatments<- read.csv("Respiration/Data/samp_info.csv")%>% #genotype, wound type, temp
+  mutate(coral_id = as.character(coral_id)) 
+Treatments$temp[Treatments$coral_id == 17] <- "H"
+Treatments$temp[Treatments$coral_id == 5] <- "A"
+Volume<- read.csv("Respiration/Data/day10/chamber_vol_day10.csv")%>% #vol of water in each chamber 
+  mutate(coral_id = as.character(coral_id)) 
+SA<- read.csv("Surface_Area/Output/post_wound_surface_areas.csv")%>% #postwound SA of each coral
+  mutate(coral_id = as.character(coral_id))%>%
+  rename(SA = SA_post_wound)
+list_df = list(Treatments, Volume, SA) 
+Sample.Info<-list_df%>%purrr::reduce(left_join, by= 'coral_id')%>%select(-X)%>% #combine data frames by coral_id
+  mutate(file.names.full = paste0(date, "_", temp, "_", coral_id)) #create file.names.full column that matches data file names
+Sample.Info$file.names.full <- paste0(substring(Sample.Info$file.names.full, 1, 8), "_10", substring(Sample.Info$file.names.full, 9)) #add _10 after the 8th character 
+blank_files<-read.csv("Respiration/Data/day10/blanks_only.csv")
+blank_files<-blank_files%>%mutate(blank_files, file.names.full = coral_id)
+Sample.Info <- rbind(Sample.Info, blank_files)
+Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_') # Add '_O2' to the end of each value in the new column
+names(Sample.Info)[2] <- "coral_num"
+names(Sample.Info)[8] <- "coral_id"
+Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
+
+```
+
+
+
+# Load in day 10 Respiration Rates, join with day 10 Sample Info, assign blank rates to each coral ID
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
+#read in Photo.R file so dont need to run entire for loop again
+Respiration <- read.csv('Output/Respiration/day10/Respiration.csv')%>% select(-X)
+Respiration<-left_join(Respiration, Sample.Info, by='coral_id')%>%
+  rename(surf.area.cm2=SA)
+#Convert sample volume to L
+Respiration$chamber_vol <- Respiration$chamber_vol/1000 #calculate volume
+#Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
+Respiration$umol.sec <- Respiration$umol.L.sec*Respiration$chamber_vol
+
+# Extract rows with blank data from respiration data frame
+blankrows <- c(99, 100, 119, 120, 79, 80, 60, 59, 40, 39, 19, 20)
+blank_rates <- Respiration[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
+
+Respiration<- drop_na(Respiration)%>%mutate(coral_num = as.numeric(coral_num))
+
+blanks<-read.csv('Data/day10/blanks.csv')%>%
+  rename("blank_id" = "coral_id")
+blanks$blank_id <- paste(blanks$blank_id, 'O2', sep = '_')
+
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE)
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+
+Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
+Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
+
+#### Normalize to SA (surface area)
+
+#Calculate net R
+Respiration$umol.cm2.hr <- (Respiration$umol.sec.corr*3600)/Respiration$surf.area.cm2 #mmol cm-2 hr-1
+# Take the absolute (positive) value of the 'umol.cm2.hr' column
+Respiration<- Respiration%>%
+  mutate(umol.cm2.hr = abs(umol.cm2.hr))%>%
+  mutate(genotype = as.factor(genotype))
+
+# log the rates
+Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
+
+#export normalized rates
+#write.csv(Respiration, 'Output/Standardized_PostwoundSA/Respiration/norm_resp_day10.csv')
+```
+
+# Read in Final Sample Info
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
+#load in sample information files
+Treatments<- read.csv("Respiration/Data/samp_info.csv")%>% #genotype, wound type, temp
+  mutate(coral_id = as.character(coral_id)) 
+Treatments$temp[Treatments$coral_id == 17] <- "H"
+Treatments$temp[Treatments$coral_id == 5] <- "A"
+Volume<- read.csv("Respiration/Data/final/chamber_vol_final.csv")%>% #vol of water in each chamber 
+  mutate(coral_id = as.character(coral_id)) 
+SA<- read.csv("Surface_Area/Output/post_wound_surface_areas.csv")%>% # postwound SA of each coral
+  mutate(coral_id = as.character(coral_id))%>%
+  rename(SA = SA_post_wound)
+list_df = list(Treatments, Volume, SA) 
+Sample.Info<-list_df%>%purrr::reduce(left_join, by= 'coral_id')%>%select(-X)%>% #combine data frames by coral_id
+  mutate(file.names.full = paste0(date, "_", temp, "_", coral_id)) #create file.names.full column that matches data file names
+Sample.Info$file.names.full <- paste0(substring(Sample.Info$file.names.full, 1, 8), "_F", substring(Sample.Info$file.names.full, 9)) #add _F after the 8th character 
+blank_files<-read.csv("Respiration/Data/final/blanks_only.csv")%>%mutate(file.names.full = coral_id)
+
+Sample.Info%>%select(coral_id, genotype)-> genotype
+
+Sample.Info <- rbind(Sample.Info, blank_files)
+Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_') # Add '_O2' to the end of each value in the new column
+
+```
+# Load in final Respiration Rates, join with final Sample Info, assign blank rates to each coral ID
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
+#read in Photo.R file so dont need to run entire for loop again
+Respiration <- read.csv('Output/Respiration/Final/Respiration.csv')%>% select(-X)%>%rename(file.names.full = coral_id)
+Respiration<-left_join(Respiration, Sample.Info, by='file.names.full')%>%
+  rename(surf.area.cm2 = SA)
+#Convert sample volume to L
+Respiration$chamber_vol <- Respiration$chamber_vol/1000 #calculate volume
+#Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
+Respiration$umol.sec <- Respiration$umol.L.sec*Respiration$chamber_vol
+
+# Extract rows with blank data from respiration data frame
+blankrows <- c(99, 98, 119, 118, 79, 78, 60, 59, 40, 39, 19, 20)
+blank_rates <- Respiration[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
+
+Respiration<- drop_na(Respiration)%>%mutate(coral_id = as.numeric(coral_id))%>%rename(coral_num = coral_id)
+
+blanks<-read.csv('Data/Final/blanks.csv')%>%
+  rename("blank_id" = "coral_id")
+
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE)
+merged_data$blank_id <- paste(merged_data$blank_id, 'O2', sep = '_')
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+
+Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
+Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
+
+#### Normalize to SA (surface area)
+
+#Calculate net R
+Respiration$umol.cm2.hr <- (Respiration$umol.sec.corr*3600)/Respiration$surf.area.cm2 #mmol cm-2 hr-1
+# Take the absolute (positive) value of the 'umol.cm2.hr' column
+Respiration<- Respiration%>%
+  mutate(umol.cm2.hr = abs(umol.cm2.hr))%>%
+  mutate(genotype = as.factor(genotype))
+
+# log the rates
+Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
+
+#export normalized rates
+#write.csv(Respiration, 'Output/Standardized_PostwoundSA/Respiration/norm_resp_final.csv')
+
+```
+
+
+# Read in complete respiration data from each timepoint, all of these rates are standardized by geometric surface area measurements
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
+read.csv("Output/Standardized_TimepointSA/Respiration/norm_resp_initial.csv")%>%select(coral_num, umol.cm2.hr, Rate.ln, Temp.C, temp, wound)%>%mutate(timepoint = "day0") -> R1 
+read.csv("Output/Standardized_TimepointSA/Respiration/norm_resp_24.csv")%>%select(coral_num, umol.cm2.hr, Rate.ln, Temp.C, temp, wound)%>%mutate(timepoint = "day1") -> R2
+read.csv("Output/Standardized_PostwoundSA/Respiration/norm_resp_day10.csv")%>%select(coral_num, umol.cm2.hr, Rate.ln, Temp.C, temp, wound)%>%mutate(timepoint = "day10") -> R3
+read.csv("Output/Standardized_PostwoundSA/Respiration/norm_resp_final.csv")%>%select(coral_num, umol.cm2.hr, Rate.ln, Temp.C, temp, wound)%>%mutate(timepoint = "day19") -> R4
+
+rbind(R1, R2, R3, R4) -> All.Respiration
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17)
+# Remove rows based on the condition
+All.Respiration.Clean <- All.Respiration[!(All.Respiration$coral_num %in% corals_to_remove), ]
+#write.csv(All.Respiration.Clean, "Output/Respiration/full.resp.data.clean.postwoundnorm.csv")
+```
+# Data analysis
+```{r}
+data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Respiration/full.resp.data.clean.postwoundnorm.csv")%>%select(-X)%>%rename (coral_id = coral_num)
+genotype$coral_id<- as.character(genotype$coral_id)
+data$coral_id<- as.character(data$coral_id)
+
+data%>%left_join(genotype, by = "coral_id")%>%mutate(wound = as.factor(wound), 
+                                                     timepoint = as.factor(timepoint),
+                                                     temp = as.factor(temp))-> data
+
+ggplot(data = data%>%filter(!timepoint == "day0"), aes(x= temp, y = umol.cm2.hr, fill = temp))+geom_boxplot()
+
+ggplot(data = data, aes(x = wound, y = umol.cm2.hr, fill = temp)) +
+  geom_point(aes(col = temp))+ geom_boxplot()+
+ # geom_smooth(method = "lm")+
+  facet_wrap(~timepoint)
+
+summary(aov(umol.cm2.hr ~ temp*wound, data = data %>% filter(!timepoint == ("day0"))))
+summary(aov(umol.cm2.hr ~ temp + wound, data = data %>% filter(!timepoint == ("day0"))))
+
+summary(glm(umol.cm2.hr ~ temp*wound, data = data %>% filter(!timepoint == ("day0"))))
+summary(glm(umol.cm2.hr ~ temp + wound, data = data %>% filter(!timepoint == ("day0"))))
+```
+
+
+
+

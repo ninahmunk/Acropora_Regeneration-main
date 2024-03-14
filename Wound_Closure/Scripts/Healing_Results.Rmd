@@ -1,0 +1,114 @@
+---
+title: "ACR Wound Closure Rate"
+author: "Ninah Munk"
+date: "2024-03-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(dplyr)
+library(janitor)
+library(ggplot2)
+library(stringr)
+
+```
+
+# Load in the data + make some basic plots
+```{r}
+data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/wound_closure_measurements.csv")%>%clean_names()
+
+data$time_point_initial[data$time_point_initial == "say14"] <- "day14"
+
+
+ggplot(data = data, aes(x = area_mm2, y = perimeter))+geom_point()
+
+ggplot(data = data, aes(x = area_mm2, y = ferets_diameter_mm))+geom_point()
+
+data<- data%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(time_point_initial = as.factor(time_point_initial))
+
+#desired_order<- c("initial", "day7", "day14", "final")
+data$time_point_initial <- factor(data$time_point_initial, levels = c("initial", "day7", "day14", "final"))
+
+ggplot(data = data, aes(x = time_point_initial, y = P.A))+geom_point()
+
+
+```
+#load in sample info and join with data
+```{r}
+samp.info<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/darkhours_mastersheetcsv.csv")
+
+data2<- left_join(data, samp.info, by = "coral_id")
+
+```
+
+
+
+# Area 
+```{r}
+ggplot(data = data2, aes(x = time_point_initial, y = area_mm2))+geom_point()+facet_wrap(~temp)
+```
+# Presence of Apical Polyps 
+```{r}
+data2 <- data2 %>% mutate(apical_polyp_tentacles = str_squish(apical_polyp_tentacles)) 
+
+ggplot(data = data2, aes(y = apical_polyp_tentacles))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)
+
+data2%>%filter(time_point_initial == "day14")-> filtered
+
+ggplot(data = filtered, aes(x =apical_polyp_tentacles))+geom_bar()+facet_wrap(~temp)
+```
+
+
+# Number of new polyps 
+```{r}
+ggplot(data = data2, aes(y = num_new_polyps))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)
+
+ggplot(data = data2, aes(x = time_point_initial, y = num_new_polyps))+geom_point()+facet_wrap(~temp)
+```
+# Analysis of main ACR regen project 
+
+```{r}
+data3<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/big_n_closure.csv")%>%clean_names()%>%slice(-45, -46, -47, -48)
+
+ggplot(data = data3, aes(x = area_mm2, y = perimeter))+geom_point()
+
+ggplot(data = data3, aes(x = area_mm2, y = ferets_diameter_mm))+geom_point()
+
+data3<- data3%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(time_point_initial = as.factor(time_point_initial))%>% replace(is.na(.), 0)
+
+data3$time_point_initial <- factor(data3$time_point_initial, levels = c("initial", "24hr", "day10", "final"))
+
+ggplot(data = data3, aes(x = time_point_initial, y = P.A))+geom_point()
+
+
+
+
+```
+
+```{r}
+samp.info2<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")
+data4<- left_join(data3, samp.info2, by = "coral_id")
+ggplot(data = data4, aes(x = time_point_initial, y = area_mm2))+geom_point()+facet_wrap(~temp)
+
+
+```
+
+```{r}
+data4 <- data4 %>% mutate(apical_polyp_tentacles = str_squish(apical_polyp_tentacles))
+
+ggplot(data = data4, aes(y = apical_polyp_tentacles))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)
+
+data4%>%filter(time_point_initial == "day10")-> filtereddata
+
+ggplot(data = filtereddata, aes(x =apical_polyp_tentacles))+geom_bar()+facet_wrap(~temp)
+```
+# number of new polyps
+```{r}
+ggplot(data = data4, aes(x = num_new_polyps))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)
+
+ggplot(data = data4, aes(x = time_point_initial, y = num_new_polyps))+geom_point()+facet_wrap(~temp)
+```
+
