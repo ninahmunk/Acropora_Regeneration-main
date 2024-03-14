@@ -1,0 +1,41 @@
+coral_id,time_point(*initial..),area_mm2,perimeter,ferets_diameter_mm,num_new_polyps,apical_polyp_tentacles,notes
+109,initial,23.498,26.139,6.846,0,no,some white tips on polyp tentacles of polyps in the top half of the coral/around the wound 
+109,day7,20.541,22.638,6.216,2,no,minimal white tips 
+109,day14,7.172,9.625,3.646,3,yes,no white tips
+109,final,0,0,0,5,yes,"new polyps are lighter in color, more white looking areas than established polyps "
+113,initial,20.367,22.212,6.544,0,no,almost all polyps in the top half of the coral have white tentacles
+113,day7,25.773,24.344,7.27,2,yes,"less white polyps, apical polyp is white "
+113,day14,9.792,14.147,4.41,6,yes,almost no white tentacles
+113,final,0,0,0,0,yes,
+114,initial,23.17,24.139,6.668,0,no,some white tips of tentacles
+114,day7,15.897,19.593,5.721,1,no,
+114,say14,5.646,9.597,3.476,2,no,almost no white tips on tentacles 
+114,final,0,0,0,2,no,
+116,initial,16.74,18.483,5.739,0,no,
+116,day7,10.269,14.047,5.196,3,yes,
+116,day14,12.296,14.743,4.485,2,yes,
+116,final,0,0,0,2,yes,
+119,initial,19.282,29.293,8.056,0,no,Some polyp tentacles are white 
+119,day7,15.307,21.742,6.885,5,no,tips of some polyp tentacles are white
+119,day14,6.497,9.723,3.477,2,yes,"polyps overall looking darker in color with still a few white tips, apical polyp is hard to see beacuse white but can see tentacles "
+119,final,0,0,0,0,yes,"polyps very dark in color and no white, apical polyp is mostly white with little brown"
+121,initial,26.278,28.464,7.483,0,no,polyps outside of wound area have white tips 
+121,day7,25.821,23.879,7.177,2,no,less white tips 
+121,day14,11.491,14.912,4.767,9,yes,some white tips 
+121,final,0,0,0,2,yes,much darker 
+123,initial,12.36,15.434,5.35,0,no,white tips on polyps near wound region
+123,day7,15.34,17.844,5.976,2,no,
+123,day14,11.544,13.54,4.333,1,yes,
+123,final,0,0,0,3,yes,
+124,initial,29.993,39.331,10.17,0,no,
+124,day7,15.071,24.997,7.028,2,no,
+124,day14,4.609,7.973,2.571,3,yes,"can see white portions of polyps, middle of them and/or tips of tentacles "
+124,final,0,0,0,3,yes         ,
+125,initial,18.816,20.393,5.807,0,no,
+125,day7,19.18,20.072,6.299,2,no,
+125,day14,12.642,20.089,5.473,4,yes,
+125,final,0,0,0,4,yes,
+126,initial,18.972,19.964,6.498,0,no,many of the polyps in the top half of the coral have white tips and tentacles 
+126,day7,23.629,23.063,7.228,2,no,can clearly see that the tips of the tentacles are white in a few polyps around the wound and new polyps 
+126,day14,5.871,10.992,3.936,3,yes,"white tips on the apical polyp, less white tips around wound "
+126,final,0,0,0,2,yes,tentacles are much darker and miniamal white
