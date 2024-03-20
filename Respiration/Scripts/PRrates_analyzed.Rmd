@@ -7,7 +7,6 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, root.dir = "C:/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
-library(tidyverse)
 library(dplyr)
 library(ggplot2)
 library(janitor)
@@ -15,6 +14,8 @@ library(emmeans)
 library(lme4)
 library(Matrix)
 library(readxl)
+library(tidyr)
+#library(multcomp)
 
 ```
 
@@ -76,6 +77,21 @@ merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
 
 Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
 Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
+
+# checking respiration x initial size 
+initial.resp.raw<- Respiration%>%mutate(coral_num = as.character(coral_num))
+initialSA<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/initial_surface_areas.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(coral_num = coral_id)
+initial.drymass<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_initial.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(drymass = initial, coral_num = coral_id)
+
+initial.resp.raw%>%left_join(initial.drymass, by = "coral_num")%>%left_join(initialSA, by = "coral_num")%>%mutate(wound = as.factor(wound)) -> initial.resp.raw
+
+ggplot(data = initial.resp.raw, aes(x = SA, y = umol.sec.corr, col = temp))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  ggtitle("Pre Injury")
+
+ggplot(data = initial.resp.raw, aes(x = drymass, y = umol.sec.corr))+geom_point()
+
 
 #### Normalize to SA (surface area)
 
@@ -153,6 +169,20 @@ merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
 Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
 Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
 
+# checking respiration x initial (postwound) size 
+resp.raw.24<- Respiration%>%mutate(coral_num = as.character(coral_num))
+SA.24<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(coral_num = coral_id)%>%rename(SA = SA_post_wound)
+drymass.24<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_24.csv")%>%mutate(coral_id = as.character(coral_id))%>%select(coral_id, dry_mass_coral_g)%>%rename(drymass = dry_mass_coral_g, coral_num = coral_id)
+
+resp.raw.24%>%left_join(drymass.24, by = "coral_num")%>%left_join(SA.24, by = "coral_num")%>%mutate(wound = as.factor(wound)) -> resp.raw.24
+
+ggplot(data = resp.raw.24, aes(x = SA, y = umol.sec.corr, col = temp, shape = wound))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound)+
+  ggtitle("24 hours after Injury")
+ggplot(data = resp.raw.24, aes(x = drymass, y = umol.sec.corr))+geom_point()
+
 #### Normalize to SA (surface area)
 
 #Calculate net R
@@ -228,6 +258,20 @@ merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
 Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
 Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
 
+# checking respiration x initial (postwound) size 
+resp.raw.10<- Respiration%>%mutate(coral_num = as.character(coral_num))
+SA.10<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(coral_num = coral_id)%>%rename(SA = SA_post_wound)
+drymass.10<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_day10.csv")%>%mutate(coral_id = as.character(coral_id))%>%select(coral_id, dry_mass_coral_g)%>%rename(drymass = dry_mass_coral_g, coral_num = coral_id)
+
+resp.raw.10%>%left_join(drymass.10, by = "coral_num")%>%left_join(SA.10, by = "coral_num")%>%mutate(wound = as.factor(wound)) -> resp.raw.10
+
+ggplot(data = resp.raw.10, aes(x = SA, y = umol.sec.corr, col = temp, shape = wound))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound)+
+  ggtitle("10 days after injury")
+ggplot(data = resp.raw.10, aes(x = drymass, y = umol.sec.corr))+geom_point()
+
 #### Normalize to SA (surface area)
 
 #Calculate net R
@@ -299,6 +343,20 @@ merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
 Respiration<- left_join(Respiration, merged_data, by= 'coral_num')
 Respiration$umol.sec.corr<-Respiration$umol.sec-Respiration$blank.umol.sec
 
+# checking respiration x initial (postwound) size 
+resp.raw.19<- Respiration%>%mutate(coral_num = as.character(coral_num))
+SA.19<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(coral_num = coral_id)%>%rename(SA = SA_post_wound)
+drymass.19<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_final.csv")%>%mutate(coral_id = as.character(coral_id))%>%select(coral_id, dry_mass_coral_g)%>%rename(drymass = dry_mass_coral_g, coral_num = coral_id)
+
+resp.raw.19%>%left_join(drymass.19, by = "coral_num")%>%left_join(SA.19, by = "coral_num")%>%mutate(wound = as.factor(wound)) -> resp.raw.19
+
+ggplot(data = resp.raw.19, aes(x = SA, y = umol.sec.corr, col = temp, shape = wound))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound)+
+  ggtitle("19 days after injury")
+ggplot(data = resp.raw.19, aes(x = drymass, y = umol.sec.corr))+geom_point()
+
 #### Normalize to SA (surface area)
 
 #Calculate net R
@@ -313,6 +371,28 @@ Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
 
 #export normalized rates
 #write.csv(Respiration, 'Output/Standardized_PostwoundSA/Respiration/norm_resp_final.csv')
+
+```
+
+
+```{r}
+initial.resp.raw%>%mutate(timepoint = "day0")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->raw.1
+resp.raw.24%>%mutate(timepoint = "day1")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->raw.2
+resp.raw.10%>%mutate(timepoint = "day10")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->raw.3
+resp.raw.19%>%mutate(timepoint = "day19")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->raw.4
+
+rbind(raw.1, raw.2, raw.3, raw.4) -> all.raw.resp
+corals_to_remove <- c(11, 5, 37, 104, 71, 17)
+# Remove rows based on the condition
+all.raw.resp.clean <- all.raw.resp[!(all.raw.resp$coral_num %in% corals_to_remove), ]
+
+#write.csv(all.raw.resp.clean, "/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Respiration/full.raw.resp.clean.csv")
+
+ggplot(data = all.raw.resp.clean, aes(x = SA, y = umol.sec.corr, col = temp))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound + timepoint)+
+  ggtitle("Respiration ~ Initial size")
 
 ```
 
@@ -349,12 +429,42 @@ ggplot(data = data, aes(x = wound, y = umol.cm2.hr, fill = temp)) +
  # geom_smooth(method = "lm")+
   facet_wrap(~timepoint)
 
-summary(aov(umol.cm2.hr ~ temp*wound, data = data %>% filter(!timepoint == ("day0"))))
-summary(aov(umol.cm2.hr ~ temp + wound, data = data %>% filter(!timepoint == ("day0"))))
+glm.interation<- glm(umol.cm2.hr ~ temp*wound, data = data %>% filter(!timepoint == ("day0")))
+summary(mod2.interation) #intercept is significant, interaction is not 
+glm<- glm(umol.cm2.hr ~ temp + wound, data = data %>% filter(!timepoint == ("day0")))
+summary(mod2) #intercept and temp is significant 
 
-summary(glm(umol.cm2.hr ~ temp*wound, data = data %>% filter(!timepoint == ("day0"))))
-summary(glm(umol.cm2.hr ~ temp + wound, data = data %>% filter(!timepoint == ("day0"))))
+aov.interaction<- aov(umol.cm2.hr ~ temp*wound, data = data %>% filter(!timepoint == ("day0")))
+summary(mod.interaction) #temp is significant, interaction is not significant
+aov<- aov(umol.cm2.hr ~ temp + wound, data = data %>% filter(!timepoint == ("day0")))
+summary(aov)
+
+#post_hoc <- glht(aov, linfct = mcp(temp= "Tukey")) 
+#summary(post_hoc) 
+
 ```
+# Checking to see if Respiration Rate has a relationship with coral initial size 
+```{r}
+#postwound timepoint metrics
+SA<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/final_surface_areas.csv")%>%select(coral_id, CSA_cm2)%>%mutate(coral_id = as.character(coral_id))
+drymass<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_final.csv")%>%select(coral_id, dry_mass_coral_g)%>%mutate(coral_id = as.character(coral_id))
+
+data2<- data%>%filter(!timepoint == ("day0"))
+
+data2%>%left_join(SA, by = "coral_id")%>%left_join(drymass, by = "coral_id") -> data2
+
+ggplot(data = data2%>%filter(timepoint == ("day19")), aes( x = dry_mass_coral_g, y = umol.cm2.hr))+geom_point()
+
+#i think i need to look at raw respiration rates that are not standardized by SA
+```
+
+# Raw Respiration Rates by initial and final coral size (surface area and weight)
+
+```{r}
+
+```
+
+
 
 
 

@@ -1,5 +1,6 @@
 # photosynthesis and respiration code for A. pulchra experiments June-July 2023
 remotes::install_github('colin-olito/LoLinR')
+
 library("ggplot2")
 library("segmented")
 library("plotrix")
@@ -13,14 +14,12 @@ library('stringr')
 library('Rmisc')
 library('janitor')
 library('readxl')
-library("tidyr")
-library("AICcmodavg")
-library("car")
-library("PMCMRplus")
 
 #Set working directory and the path of all respo data files
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main")
 getwd()
+
+path.p<-"/Users/ninahmunk/Desktop/Projects/Regeneration/Respiration/Data/initial/runs"
 
 #make a list of the respo file names inside intial timepoint folder, n=120
 file.names <- list.files(path = path.p, pattern = "csv$")
