@@ -186,10 +186,12 @@ smpls%>%select(coral_id, SA)%>%mutate(timepoint = "final") -> SA.4
 
 rbind(SA.1, SA.2, SA.3, SA.4) -> SA.long
 #clean data
-corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29)
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100) #100 is an outlier it has double the growth rate of the next fastest growing coral 
 SA.long.clean <- SA.long[!(SA.long$coral_id %in% corals_to_remove), ]
 
 ```
+
+
 # Growth Rates 
 
 ## Calculate Growth Rates not normalized by SA
@@ -210,19 +212,31 @@ SA.long.clean%>%pivot_wider(names_from = timepoint,
 
 SA.clean.wide%>%left_join(skeletal.mass.clean.wide, by = "coral_id") -> mass.SA
 
-mass.SA%>%mutate(full.growth = ((final_weight - day1_weight)*1000),
-                 pt1.growth = ((day10_weight - day1_weight)*1000),
-                 pt2.growth = ((final_weight - day10_weight)*1000))-> growth
+mass.SA%>%mutate(full.growth = (((final_weight - day1_weight)/19)*1000),
+                 pt1.growth = (((day10_weight - day1_weight)/9)*1000),
+                 pt2.growth = (((final_weight - day10_weight)/9)*1000))-> growth
 growth.not.normal<- growth%>%left_join(sample.info, by = "coral_id")
 
 growth.not.normal$wound<- as.factor(growth.not.normal$wound)
 
 ggplot(growth.not.normal, aes(x = wound, y = full.growth, col = temp))+
-  geom_boxplot()+ggtitle("Growth Rate over entire duration of exp (not normalized by SA")
+  geom_boxplot()+ggtitle("Growth Rate over entire duration of exp (not normalized by SA)")
 
 # checking to see if initial coral size was correlated with growth rate 
 ggplot(growth.not.normal, aes (x=initial_weight, y = full.growth))+ geom_point()
 ggplot(growth.not.normal, aes (x=day1_weight, y = full.growth))+ geom_point()
+
+ggplot(data = growth.not.normal, aes(x = day1.SA, y = full.growth, col = temp))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound)+
+  ggtitle("Growth (mg) ~ Initial size")
+
+ggplot(data = growth.not.normal, aes(x = day1.SA, y = full.growth, col = wound))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  #facet_wrap(~temp)+
+  ggtitle("Growth (mg) ~ Initial size")
 
 summary(growth.not.normal)
 #make data long again
@@ -238,13 +252,44 @@ ggplot(data = growth.not.normal.long, aes(x = exp_period, y = growthrate, shape 
   theme_classic()+
   ggtitle("not standardized growth = mg/day")
 
+ggplot(data = growth.not.normal.long, aes(x = day1.SA, y = growthrate, col = wound))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~exp_period + temp)+
+  ggtitle("Growth (mg) ~ Initial size")
+
+
+
 ```
+
+
+```{r}
+model<- aov(full.growth ~ wound + as.factor(temp), data = growth.not.normal)
+summary(model)
+
+model2<- glm(full.growth ~ wound + as.factor(temp), data = growth.not.normal)
+summary(model2)
+
+model3<- lm(full.growth ~ wound + as.factor(temp) , data = growth.not.normal)
+summary(model3)
+
+emmeans_results <- emmeans(model2, ~ wound + temp)
+# Display the EMMs
+print(emmeans_results)
+# Pairwise comparisons for the levels within each predictor
+pairwise_results <- pairs(emmeans_results)
+# Display the pairwise comparisons
+print(pairwise_results)
+
+```
+
+
 
 ## Normalize growth by timepoint specific SA
 ```{r}
-growth%>%mutate(full.growth.rate = (full.growth / final.SA) / 19,
-                pt1.growth.rate = (pt1.growth / day1.SA) / 9,
-                pt2.growth.rate = (pt2.growth / final.SA) / 9)%>%left_join(sample.info, by = "coral_id") -> growth.normal
+growth%>%mutate(full.growth.rate = (full.growth / final.SA),
+                pt1.growth.rate = (pt1.growth / day1.SA),
+                pt2.growth.rate = (pt2.growth / final.SA))%>%left_join(sample.info, by = "coral_id") -> growth.normal
 growth.normal$wound<- as.factor(growth.normal$wound)
 
 ggplot(growth.normal, aes(x = wound, y = full.growth.rate, col = temp))+
@@ -273,9 +318,9 @@ ggplot(data = growth.normal.long, aes(x = exp_period, y = growthrate, shape = wo
 
 ## Growth Rate standardized by post wound SA 
 ```{r}
-growth%>%mutate(full.growth.rate = (full.growth / day1.SA) / 19,
-                pt1.growth.rate = (pt1.growth / day1.SA) / 9,
-                pt2.growth.rate = (pt2.growth / day1.SA) / 9)%>%left_join(sample.info, by = "coral_id") -> growth1.normal
+growth%>%mutate(full.growth.rate = (full.growth / day1.SA),
+                pt1.growth.rate = (pt1.growth / day1.SA),
+                pt2.growth.rate = (pt2.growth / day1.SA))%>%left_join(sample.info, by = "coral_id") -> growth1.normal
 growth1.normal$wound<- as.factor(growth1.normal$wound)
 
 ggplot(growth1.normal, aes(x = wound, y = full.growth.rate, col = temp))+
@@ -298,6 +343,17 @@ ggplot(data = growth1.normal.long, aes(x = exp_period, y = growthrate, shape = w
   facet_wrap(~temp)+ 
   theme_classic()+
   ggtitle("Growth Rate normalized by post wound SA (mg/cm2/day)")
+
+ggplot(data = growth1.normal.long, aes(x = wound, y = full.growth.rate, fill = temp))+geom_point(aes(col = temp))+
+  stat_summary( fun = "mean", geom = "bar", position = position_dodge(width = 1))+
+  theme_classic()+
+  ggtitle("Mean Growth Rate")
+
+ggplot(data = growth1.normal.long, aes(x = wound, y = growthrate, fill = temp))+geom_point(aes(col = temp))+
+  stat_summary( fun = "mean", geom = "bar", position = position_dodge(width = 1))+
+  facet_wrap(~exp_period)+ 
+  theme_classic()+
+  ggtitle("Mean Growth Rate split between exp time periods")
 
 
 ```
@@ -322,6 +378,11 @@ m4 <- lmer(full.growth.rate ~ wound + temp + wound:temp + (1|genotype), data = g
   summary(m4)
 m4.null<- lm(full.growth.rate ~ wound + temp + wound:temp, data = growth1.normal)
   summary(m4.null)
+  
+a<- glm(full.growth.rate ~ wound*temp, data = growth1.normal)
+  summary(a)
+b<- glm(full.growth.rate ~ wound + temp, data = growth1.normal)
+  summary(b)
   
 # Obtain  estimated marginal means (EMMs) for all levels of the predictors
 emmeans_results <- emmeans(m4, ~ wound + temp + wound:temp)
@@ -375,9 +436,9 @@ print(pairwise_results1)
 
 ## standardized by final SA only 
 ```{r}
-growth%>%mutate(full.growth.rate = (full.growth / final.SA) / 19,
-                pt1.growth.rate = (pt1.growth / final.SA) / 9,
-                pt2.growth.rate = (pt2.growth / final.SA) / 9)%>%left_join(sample.info, by = "coral_id") -> growth2.normal
+growth%>%mutate(full.growth.rate = (full.growth / final.SA),
+                pt1.growth.rate = (pt1.growth / final.SA),
+                pt2.growth.rate = (pt2.growth / final.SA))%>%left_join(sample.info, by = "coral_id") -> growth2.normal
 growth2.normal$wound<- as.factor(growth2.normal$wound)
 
 ggplot(growth2.normal, aes(x = wound, y = full.growth.rate, col = temp))+

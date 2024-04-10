@@ -19,7 +19,7 @@ library(tidyr)
 
 ```
 
-# Initial sample info
+# Initial sample info, here I'm combining treatment information with chamber volume and surface area for normaling O2 rates
 ```{r}
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
 Treatments<- read.csv("Respiration/Data/initial/samp_info.csv") #genotype, wound type, temp
@@ -40,7 +40,7 @@ Sample.Info$file.names.full <- paste(Sample.Info$file.names.full, 'O2', sep = '_
 
 ```
 
-# Load in Initial Respiration Rates, join with Initial Sample Info, assign blank rates to each coral ID
+# Load in initial respiration rates, join with initial sample info, assign blank rates to each coral ID. Blank rates are from the seawater only chamber run along with each set of corals, this O2 rate is subtracted from all coral O2 rates to account for 'background noise'. 
 ```{r}
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration")
 
@@ -88,7 +88,7 @@ initial.resp.raw%>%left_join(initial.drymass, by = "coral_num")%>%left_join(init
 ggplot(data = initial.resp.raw, aes(x = SA, y = umol.sec.corr, col = temp))+
   geom_point()+
   geom_smooth(method='lm')+
-  ggtitle("Pre Injury")
+  ggtitle("Pre Injury, larger corals respire more")
 
 ggplot(data = initial.resp.raw, aes(x = drymass, y = umol.sec.corr))+geom_point()
 
@@ -110,6 +110,62 @@ Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
 
 read.csv("Output/Standardized_TimepointSA/Respiration/norm_resp_initial.csv") -> R1
 ```
+
+# Load in initial photosynthesis rates, join with initial sample info, assign blank rates to each coral ID. Blank rates are from the seawater only chamber run along with each set of corals, this O2 rate is subtracted from all coral O2 rates to account for 'background noise'.
+```{r}
+#setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Photosynthesis/initial/Photosynthesis.csv")
+
+#read in Photosynthesis file
+Photosynthesis <- read.csv('/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Photosynthesis/initial/Photosynthesis.csv')%>%select(-X)
+Photosynthesis$coral_id[9]='20230605_g1_25_O2'
+Photosynthesis<-left_join(Photosynthesis, Sample.Info, by='coral_id')%>%
+  rename(surf.area.cm2=SA)
+#Convert sample volume to L
+Photosynthesis$chamber_vol <- Photosynthesis$chamber_vol/1000 #calculate volume
+#Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
+Photosynthesis$umol.sec <- Photosynthesis$umol.L.sec*Photosynthesis$chamber_vol
+
+# Extract rows with blank data from data frame
+blankrows <- c(117, 118, 119, 120, 77, 78, 79, 80, 40, 39, 38, 37)
+blank_rates <- Photosynthesis[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
+
+Photosynthesis<- drop_na(Photosynthesis)%>%mutate(coral_num = as.numeric(coral_num))
+
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE) #need to input 20230605_g1_blank4 rate here
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+
+Photosynthesis<- left_join(Photosynthesis, merged_data, by= 'coral_num')
+Photosynthesis$umol.sec.corr<-Photosynthesis$umol.sec-Photosynthesis$blank.umol.sec
+
+# checking photosynthesis x initial size 
+initial.photo.raw<- Photosynthesis%>%mutate(coral_num = as.character(coral_num))
+initialSA<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/initial_surface_areas.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(coral_num = coral_id)
+initial.drymass<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_initial.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(drymass = initial, coral_num = coral_id)
+
+initial.photo.raw%>%left_join(initial.drymass, by = "coral_num")%>%left_join(initialSA, by = "coral_num")%>%mutate(wound = as.factor(wound)) -> initial.photo.raw
+
+ggplot(data = initial.photo.raw, aes(x = SA, y = umol.sec.corr, col = temp))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  ggtitle("Pre Injury Photosynthesis")
+
+ggplot(data = initial.photo.raw, aes(x = drymass, y = umol.sec.corr))+geom_point()
+
+#Normalize to SA (surface area), Calculate net P 
+Photosynthesis$umol.cm2.hr <- (Photosynthesis$umol.sec.corr*3600)/Photosynthesis$surf.area.cm2 #mmol cm-2 hr-1
+
+# log the rates
+Photosynthesis$Rate.ln<-log(Photosynthesis$umol.cm2.hr+0.1)
+#export normalized rates
+# this is where i messed up saving resp instad of photo --> RESAVE
+write.csv(Photosynthesis, '/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Standardized_TimepointSA/Photosynthesis/norm_photo_initial.csv')
+
+#P1
+
+```
+
 # 24 hour sample info
 ```{r}
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
@@ -198,6 +254,58 @@ Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
 #export normalized rates
 #write.csv(Respiration, 'Output/Standardized_TimepointSA/Respiration/norm_resp_24.csv')
 ```
+# Load in 24 hr photosynthesis rates, join with 24 hr sample info, assign blank rates to each coral ID
+```{r}
+#read in Photosynthesis file so dont need to run entire for loop again
+Photosynthesis <- read.csv('/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Photosynthesis/24hours/Photosynthesis.csv')%>%select(-X)
+Photosynthesis$coral_id <- gsub(" ", "", Photosynthesis$coral_id)
+Photosynthesis<-left_join(Photosynthesis, Sample.Info, by='coral_id')%>%
+  rename(surf.area.cm2=SA)
+#Convert sample volume to L
+Photosynthesis$chamber_vol <- Photosynthesis$chamber_vol/1000 #calculate volume
+#Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
+Photosynthesis$umol.sec <- Photosynthesis$umol.L.sec*Photosynthesis$chamber_vol
+
+# Extract rows with blank data from respiration data frame
+blankrows <- c(99, 100, 119, 120, 79, 80, 60, 50, 40, 39, 19, 20)
+blank_rates <- Photosynthesis[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
+
+Photosynthesis<- drop_na(Photosynthesis)%>%mutate(coral_num = as.numeric(coral_num))
+
+blanks<-read.csv('/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/24hours/blanks.csv')%>%
+  rename("blank_id" = "coral_id")
+
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE)
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+
+Photosynthesis<- left_join(Photosynthesis, merged_data, by= 'coral_num')
+Photosynthesis$umol.sec.corr<-Photosynthesis$umol.sec-Photosynthesis$blank.umol.sec
+
+# checking photosynthesis x initial (postwound) size 
+photo.raw.24<- Photosynthesis%>%mutate(coral_num = as.character(coral_num))
+SA.24<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(coral_num = coral_id)%>%rename(SA = SA_post_wound)
+drymass.24<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_24.csv")%>%mutate(coral_id = as.character(coral_id))%>%select(coral_id, dry_mass_coral_g)%>%rename(drymass = dry_mass_coral_g, coral_num = coral_id)
+
+photo.raw.24%>%left_join(drymass.24, by = "coral_num")%>%left_join(SA.24, by = "coral_num")%>%mutate(wound = as.factor(wound)) -> photo.raw.24
+
+ggplot(data = photo.raw.24, aes(x = SA, y = umol.sec.corr, col = temp, shape = wound))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound)+
+  ggtitle("24 hours after Injury")
+
+ggplot(data = photo.raw.24, aes(x = drymass, y = umol.sec.corr))+geom_point()
+
+#Normalize to SA (surface area), Calculate net P 
+Photosynthesis$umol.cm2.hr <- (Photosynthesis$umol.sec.corr*3600)/Photosynthesis$surf.area.cm2 #mmol cm-2 hr-1
+
+# log the rates
+Photosynthesis$Rate.ln<-log(Photosynthesis$umol.cm2.hr+0.1)
+#export normalized rates
+#write.csv(Photosynthesis, '/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Standardized_TimepointSA/Photosynthesis/norm_photo_24.csv')
+```
 
 # read in day 10 sample info
 ```{r}
@@ -225,7 +333,6 @@ names(Sample.Info)[8] <- "coral_id"
 Sample.Info <- Sample.Info[, c(8,7,6,5,4,3,1,2)]
 
 ```
-
 
 
 # Load in day 10 Respiration Rates, join with day 10 Sample Info, assign blank rates to each coral ID
@@ -287,6 +394,64 @@ Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
 #export normalized rates
 #write.csv(Respiration, 'Output/Standardized_PostwoundSA/Respiration/norm_resp_day10.csv')
 ```
+
+# Load in day 10 photosynthesis rates, join with day 10 sample info, assign blank rates to each coral ID
+```{r}
+#read in Photosynthesis file so dont need to run entire for loop again
+Photosynthesis <- read.csv('/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Photosynthesis/day10/Photosynthesis.csv')%>%select(-X)
+#Photosynthesis$coral_id <- gsub(" ", "", Photosynthesis$coral_id)
+Photosynthesis<-left_join(Photosynthesis, Sample.Info, by='coral_id')%>%
+  rename(surf.area.cm2=SA)
+#Convert sample volume to L
+Photosynthesis$chamber_vol <- Photosynthesis$chamber_vol/1000 #calculate volume
+#Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
+Photosynthesis$umol.sec <- Photosynthesis$umol.L.sec*Photosynthesis$chamber_vol
+
+# Extract rows with blank data from respiration data frame
+blankrows <- c(99, 100, 119, 120, 79, 80, 60, 59, 40, 39, 19, 20)
+blank_rates <- Photosynthesis[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
+
+Photosynthesis<- drop_na(Photosynthesis)%>%mutate(coral_num = as.numeric(coral_num))
+
+blanks<-read.csv('/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/day10/blanks.csv')%>%
+  rename("blank_id" = "coral_id")
+blanks$blank_id <- paste(blanks$blank_id, 'O2', sep = '_')
+
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE) 
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+
+Photosynthesis<- left_join(Photosynthesis, merged_data, by= 'coral_num')
+Photosynthesis$umol.sec.corr<-Photosynthesis$umol.sec-Photosynthesis$blank.umol.sec
+
+# checking respiration x initial (postwound) size 
+photo.raw.10<- Photosynthesis%>%mutate(coral_num = as.character(coral_num))
+SA.10<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(coral_num = coral_id)%>%rename(SA = SA_post_wound)
+drymass.10<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_day10.csv")%>%mutate(coral_id = as.character(coral_id))%>%select(coral_id, dry_mass_coral_g)%>%rename(drymass = dry_mass_coral_g, coral_num = coral_id)
+
+photo.raw.10%>%left_join(drymass.10, by = "coral_num")%>%left_join(SA.10, by = "coral_num")%>%mutate(wound = as.factor(wound)) -> photo.raw.10
+
+ggplot(data = photo.raw.10, aes(x = SA, y = umol.sec.corr, col = temp, shape = wound))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound)+
+  ggtitle("10 days after injury")
+
+ggplot(data = photo.raw.10, aes(x = drymass, y = umol.sec.corr))+geom_point()
+
+
+#Normalize to SA (surface area), Calculate net P 
+Photosynthesis$umol.cm2.hr <- (Photosynthesis$umol.sec.corr*3600)/Photosynthesis$surf.area.cm2 #mmol cm-2 hr-1
+
+# log the rates
+Photosynthesis$Rate.ln<-log(Photosynthesis$umol.cm2.hr+0.1)
+
+#export normalized rates
+#write.csv(Photosynthesis, '/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Standardized_PostwoundSA/Photosynthesis/norm_photo_day10.csv')
+
+```
+
 
 # Read in Final Sample Info
 ```{r}
@@ -373,9 +538,63 @@ Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
 #write.csv(Respiration, 'Output/Standardized_PostwoundSA/Respiration/norm_resp_final.csv')
 
 ```
-
-
+# Load in final photosynthesis rates, join with final sample info, assign blank rates to each coral ID
 ```{r}
+#read in Photosynthesis file so don't need to run entire for loop again
+Photosynthesis <- read.csv('/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Photosynthesis/Final/Photosynthesis.csv')%>%select(-X)%>%rename(file.names.full = coral_id)
+Photosynthesis<-left_join(Photosynthesis, Sample.Info, by='file.names.full')%>%
+  rename(surf.area.cm2=SA)
+#Convert sample volume to L
+Photosynthesis$chamber_vol <- Photosynthesis$chamber_vol/1000 #calculate volume
+#Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
+Photosynthesis$umol.sec <- Photosynthesis$umol.L.sec*Photosynthesis$chamber_vol
+
+# Extract rows with blank data from photosynthesis data frame
+blankrows <- c(99, 98, 119, 118, 79, 78, 60, 59, 40, 39, 19, 20)
+blank_rates <- Photosynthesis[blankrows, ]%>% 
+  rename(blank_id = coral_id)%>%
+  select(blank_id, umol.sec)
+
+Photosynthesis<- drop_na(Photosynthesis)%>%rename(coral_num = coral_id)%>%mutate(coral_num = as.numeric(coral_num))
+
+blanks<-read.csv('/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/final/blanks.csv')%>%
+  rename("blank_id" = "coral_id")
+
+merged_data <- merge(blanks, blank_rates, by = "blank_id", all.x = TRUE) 
+merged_data$blank_id <- paste(merged_data$blank_id, 'O2', sep = '_')
+merged_data <- merged_data[, c(2,1,3)]%>%rename(blank.umol.sec=umol.sec)
+
+Photosynthesis<- left_join(Photosynthesis, merged_data, by= 'coral_num')
+Photosynthesis$umol.sec.corr<-Photosynthesis$umol.sec-Photosynthesis$blank.umol.sec
+
+# checking respiration x initial (postwound) size 
+photo.raw.19<- Photosynthesis%>%mutate(coral_num = as.character(coral_num))
+SA.19<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(coral_num = coral_id)%>%rename(SA = SA_post_wound)
+drymass.19<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_final.csv")%>%mutate(coral_id = as.character(coral_id))%>%select(coral_id, dry_mass_coral_g)%>%rename(drymass = dry_mass_coral_g, coral_num = coral_id)
+
+photo.raw.19%>%left_join(drymass.19, by = "coral_num")%>%left_join(SA.19, by = "coral_num")%>%mutate(wound = as.factor(wound)) -> photo.raw.19
+
+ggplot(data = photo.raw.19, aes(x = SA, y = umol.sec.corr, col = temp, shape = wound))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound)+
+  ggtitle("19 days after injury")
+
+ggplot(data = photo.raw.19, aes(x = drymass, y = umol.sec.corr))+geom_point()
+
+#Normalize to SA (surface area), Calculate net P 
+Photosynthesis$umol.cm2.hr <- (Photosynthesis$umol.sec.corr*3600)/Photosynthesis$surf.area.cm2 #mmol cm-2 hr-1
+
+# log the rates
+Photosynthesis$Rate.ln<-log(Photosynthesis$umol.cm2.hr+0.1)
+
+#export normalized rates
+#write.csv(Photosynthesis, '/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Standardized_PostwoundSA/Photosynthesis/norm_photo_final.csv')
+```
+
+# looking at raw rates only
+```{r}
+# RESPIRATION
 initial.resp.raw%>%mutate(timepoint = "day0")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->raw.1
 resp.raw.24%>%mutate(timepoint = "day1")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->raw.2
 resp.raw.10%>%mutate(timepoint = "day10")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->raw.3
@@ -394,8 +613,25 @@ ggplot(data = all.raw.resp.clean, aes(x = SA, y = umol.sec.corr, col = temp))+
   facet_wrap(~wound + timepoint)+
   ggtitle("Respiration ~ Initial size")
 
-```
+# PHOTOSYNTHESIS
+initial.photo.raw%>%mutate(timepoint = "day0")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->P.raw.1
+photo.raw.24%>%mutate(timepoint = "day1")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->P.raw.2
+photo.raw.10%>%mutate(timepoint = "day10")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->P.raw.3
+photo.raw.19%>%mutate(timepoint = "day19")%>%select(coral_num, temp, wound, genotype, timepoint, umol.sec.corr, drymass, SA) ->P.raw.4
 
+rbind(P.raw.1, P.raw.2, P.raw.3, P.raw.4) -> all.raw.photo
+corals_to_remove <- c(11, 5, 37, 104, 71, 17)
+# Remove rows based on the condition
+all.raw.photo.clean <- all.raw.photo[!(all.raw.photo$coral_num %in% corals_to_remove), ]
+
+ggplot(data = all.raw.photo.clean, aes(x = SA, y = umol.sec.corr, col = temp))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound + timepoint)+
+  ggtitle("Photosynthesis ~ Initial size")
+
+#write.csv(all.raw.photo.clean, "/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Photosynthesis/full.raw.photo.clean.csv")
+```
 
 # Read in complete respiration data from each timepoint, all of these rates are standardized by geometric surface area measurements
 ```{r}
@@ -412,7 +648,7 @@ corals_to_remove <- c(11, 5, 37, 104, 71, 17)
 All.Respiration.Clean <- All.Respiration[!(All.Respiration$coral_num %in% corals_to_remove), ]
 #write.csv(All.Respiration.Clean, "Output/Respiration/full.resp.data.clean.postwoundnorm.csv")
 ```
-# Data analysis
+# plot respiration rates (standardized)
 ```{r}
 data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Respiration/full.resp.data.clean.postwoundnorm.csv")%>%select(-X)%>%rename (coral_id = coral_num)
 genotype$coral_id<- as.character(genotype$coral_id)
@@ -422,50 +658,332 @@ data%>%left_join(genotype, by = "coral_id")%>%mutate(wound = as.factor(wound),
                                                      timepoint = as.factor(timepoint),
                                                      temp = as.factor(temp))-> data
 
-ggplot(data = data%>%filter(!timepoint == "day0"), aes(x= temp, y = umol.cm2.hr, fill = temp))+geom_boxplot()
+ggplot(data = data%>%filter(!timepoint == "day0"), aes(x= wound, y = umol.cm2.hr, fill = wound))+
+  geom_boxplot()+ggtitle("Respiration Rate")
 
-ggplot(data = data, aes(x = wound, y = umol.cm2.hr, fill = temp)) +
-  geom_point(aes(col = temp))+ geom_boxplot()+
- # geom_smooth(method = "lm")+
+ggplot(data = data, aes(x = wound, y = umol.cm2.hr, fill = wound))+ 
+  geom_boxplot()+
   facet_wrap(~timepoint)
 
+ggplot(data = data, aes(x = temp, y = umol.cm2.hr, fill = temp))+ 
+  geom_boxplot()+
+  facet_wrap(~timepoint)
+
+ggplot(data = data, aes(x = wound, y = umol.cm2.hr, fill = temp))+ 
+  geom_boxplot()+
+  facet_wrap(~timepoint)
+
+ggplot(data = data, aes(x = temp, y = umol.cm2.hr, shape = wound, col = wound))+ 
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
+  facet_wrap(~timepoint)+ 
+  theme_classic()+
+  ggtitle("Mean Respiration Rate")
+
+
+ggplot(data = data, aes(x = wound, y = umol.cm2.hr, fill = temp))+
+  stat_summary( fun = "mean", geom = "bar", position = position_dodge(width = 1))+
+  facet_wrap(~timepoint)+ 
+  theme_classic()+
+  ggtitle("Mean Respiration Rate")
+
+ggplot(data = data, aes(x = timepoint, y = umol.cm2.hr, col = wound))+ geom_point()+
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+
+  facet_wrap(~temp)+ 
+  theme_classic()+
+  ggtitle("Respiration Rate")
+
+
+```
+# models
+```{r}
+
+data%>%filter(!timepoint == ("day0")) -> data.filtered
+hist(data.filtered$umol.cm2.hr, main = "Histogram of Respiration Rates", xlab = "umol.cm2.hr") #looks pretty normal
+qqnorm(data.filtered$umol.cm2.hr) #looks normal
+shapiro.test(data.filtered$umol.cm2.hr) #not normal data according to shapiro test
+
+#models for all data post day 0 
 glm.interation<- glm(umol.cm2.hr ~ temp*wound, data = data %>% filter(!timepoint == ("day0")))
-summary(mod2.interation) #intercept is significant, interaction is not 
+summary(glm.interation) #intercept is significant, interaction is not 
 glm<- glm(umol.cm2.hr ~ temp + wound, data = data %>% filter(!timepoint == ("day0")))
-summary(mod2) #intercept and temp is significant 
+summary(glm) #intercept and temp is significant 
 
 aov.interaction<- aov(umol.cm2.hr ~ temp*wound, data = data %>% filter(!timepoint == ("day0")))
-summary(mod.interaction) #temp is significant, interaction is not significant
+summary(aov.interaction) #temp is significant, interaction is not significant
 aov<- aov(umol.cm2.hr ~ temp + wound, data = data %>% filter(!timepoint == ("day0")))
 summary(aov)
 
-#post_hoc <- glht(aov, linfct = mcp(temp= "Tukey")) 
-#summary(post_hoc) 
+
+# DAY 0 ONLY 
+data%>%filter(timepoint == "day0") -> day0
+hist(day0$umol.cm2.hr)
+qqnorm(day0$umol.cm2.hr) 
+shapiro.test(day0$umol.cm2.hr) # normal
+
+# DAY 1 ONLY
+data%>%filter(timepoint == "day1") -> day1
+hist(day1$umol.cm2.hr)
+qqnorm(day1$umol.cm2.hr) 
+shapiro.test(day1$umol.cm2.hr) # normal
+
+# DAY 10 ONLY
+data%>%filter(timepoint == "day10") -> day10
+hist(day10$umol.cm2.hr)
+qqnorm(day10$umol.cm2.hr) 
+shapiro.test(day10$umol.cm2.hr) # very not normal
+
+# DAY 19 ONLY
+data%>%filter(timepoint == "day19") -> day19
+hist(day19$umol.cm2.hr)
+qqnorm(day19$umol.cm2.hr) 
+shapiro.test(day19$umol.cm2.hr) # normal
+
+
+# Fit OLS regression models for normally distributed time points
+# DAY 0 ONLY
+model_timepoint0 <- lm(umol.cm2.hr ~ wound + temp + wound:temp + temp:genotype + wound:genotype, data = day0)
+summary(model_timepoint0)
+model_timepoint0_2 <- lm(umol.cm2.hr ~ wound + temp + wound:temp, data = day0)
+summary(model_timepoint0_2)
+model_timepoint0_3 <- lm(umol.cm2.hr ~ wound + temp + genotype, data = day0) #this one fits the best
+summary(model_timepoint0_3)
+model_timepoint0_4 <- lm(umol.cm2.hr ~ wound + temp, data = day0)
+summary(model_timepoint0_4)
+
+AIC(model_timepoint0, model_timepoint0_2,model_timepoint0_3, model_timepoint0_4) # model_timepoint0_3 has lowest value
+
+# linear mixed effects model (LMM)
+beep <- lmer(umol.cm2.hr ~ wound + temp + wound:temp + (1|genotype), data = day0)
+summary(beep)
+bop <- lmer(umol.cm2.hr ~ wound + temp + (1|genotype), data = day0) # this model fits better
+summary(bop)
+AIC(beep, bop) # bop is lower 
+
+m.d0<- emmeans(bop, ~ wound + temp) # Estimate marginal means
+pairwise.m.d0<- pairs(m.d0) # Pairwise comparisons for the levels within each predictor
+print(pairwise.m.d0)
+
+#DAY 1 ONLY
+model_timepoint1 <- lm(umol.cm2.hr ~ wound + temp + wound:temp + temp:genotype + wound:genotype, data = day1)
+summary(model_timepoint1)
+model_timepoint1_2 <- lm(umol.cm2.hr ~ wound + temp + wound:temp, data = day1)
+summary(model_timepoint1_2)
+model_timepoint1_3 <- lm(umol.cm2.hr ~ wound + temp + genotype, data = day1) # model 3 has lowest value but only 1 point lower than model 1
+summary(model_timepoint1_3)
+model_timepoint1_4 <- lm(umol.cm2.hr ~ wound + temp, data = day1)
+summary(model_timepoint1_4)
+
+AIC(model_timepoint1,model_timepoint1_2, model_timepoint1_3, model_timepoint1_4)
+
+# linear mixed effects model (LMM)
+beep1 <- lmer(umol.cm2.hr ~ wound + temp + wound:temp + (1|genotype), data = day1)
+summary(beep1)
+bop1 <- lmer(umol.cm2.hr ~ wound + temp + (1|genotype), data = day1) # this model fits better
+summary(bop1)
+AIC(beep1, bop1) # bop is lower 
+
+m.d1<- emmeans(bop1, ~ wound + temp) # Estimate marginal means
+pairwise.m.d1<- pairs(m.d1) # Pairwise comparisons for the levels within each predictor
+print(pairwise.m.d1)
+
+#DAY 19 ONLY
+model_timepoint19 <- lm(umol.cm2.hr ~ wound + temp + wound:temp + temp:genotype + wound:genotype, data = day19)
+summary(model_timepoint19)
+model_timepoint19_2 <- lm(umol.cm2.hr ~ wound + temp + wound:temp, data = day19)
+summary(model_timepoint19_2)
+model_timepoint19_3 <- lm(umol.cm2.hr ~ wound + temp + genotype, data = day19) 
+summary(model_timepoint19_3)
+model_timepoint19_4 <- lm(umol.cm2.hr ~ wound + temp, data = day19)
+summary(model_timepoint19_4)
+
+AIC(model_timepoint19, model_timepoint19_2, model_timepoint19_3, model_timepoint19_4) # model 3 has lowest value
+
+# linear mixed effects model (LMM)
+beep2 <- lmer(umol.cm2.hr ~ wound + temp + wound:temp + (1|genotype), data = day19)
+summary(beep2)
+bop2 <- lmer(umol.cm2.hr ~ wound + temp + (1|genotype), data = day19) # this model fits better
+summary(bop2)
+AIC(beep2, bop2) # bop is lower 
+
+m.d2<- emmeans(bop2, ~ wound + temp) # Estimate marginal means
+pairwise.m.d2<- pairs(m.d2) # Pairwise comparisons for the levels within each predictor
+print(pairwise.m.d2)
+
+# For positively skewed timepoint (10) --> transform 
+transformed_response <- day10%>%mutate(log.umol.cm2.hr = log(umol.cm2.hr)) # log transformation
+hist(transformed_response$log.umol.cm2.hr)
+qqnorm(transformed_response$log.umol.cm2.hr) 
+shapiro.test(transformed_response$log.umol.cm2.hr) # normal
+#DAY 10 ONLY
+model_timepoint10 <- lm(log.umol.cm2.hr ~ wound + temp + wound:temp + temp:genotype + wound:genotype, data = transformed_response) 
+summary(model_timepoint10)
+model_timepoint10_2 <- lm(log.umol.cm2.hr ~ wound + temp + wound:temp, data = transformed_response)
+summary(model_timepoint10_2)
+model_timepoint10_3 <- lm(log.umol.cm2.hr ~ wound + temp + genotype, data = transformed_response) 
+summary(model_timepoint10_3)
+model_timepoint10_4 <- lm(log.umol.cm2.hr ~ wound + temp, data = transformed_response)
+summary(model_timepoint10_4)
+
+AIC(model_timepoint10, model_timepoint10_2, model_timepoint10_3, model_timepoint10_4) # model 1 is the lowest but only by .3 followed by model 3
+
+# linear mixed effects model (LMM)
+beep3 <- lmer(umol.cm2.hr ~ wound + temp + wound:temp + (1|genotype), data = day10)
+summary(beep3)
+bop3 <- lmer(umol.cm2.hr ~ wound + temp + (1|genotype), data = day19) # this model fits better
+summary(bop3)
+AIC(beep3, bop3) # bop is lower 
+
+m.d3<- emmeans(bop3, ~ wound + temp) # Estimate marginal means
+pairwise.m.d3<- pairs(m.d3) # Pairwise comparisons for the levels within each predictor
+print(pairwise.m.d3)
 
 ```
-# Checking to see if Respiration Rate has a relationship with coral initial size 
-```{r}
-#postwound timepoint metrics
-SA<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/final_surface_areas.csv")%>%select(coral_id, CSA_cm2)%>%mutate(coral_id = as.character(coral_id))
-drymass<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_final.csv")%>%select(coral_id, dry_mass_coral_g)%>%mutate(coral_id = as.character(coral_id))
 
-data2<- data%>%filter(!timepoint == ("day0"))
+# Checking to see if normalized respiration rate has a relationship with initial coral size 
+```{r}
+#post wound timepoint metrics
+SA<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv")%>%mutate(coral_id = as.character(coral_id))%>%rename(SA = SA_post_wound)
+drymass<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/dry_mass_24.csv")%>%select(coral_id, dry_mass_coral_g)%>%mutate(coral_id = as.character(coral_id))
+
+data2<- data
 
 data2%>%left_join(SA, by = "coral_id")%>%left_join(drymass, by = "coral_id") -> data2
 
-ggplot(data = data2%>%filter(timepoint == ("day19")), aes( x = dry_mass_coral_g, y = umol.cm2.hr))+geom_point()
+ggplot(data = data2, aes(x = SA, y = umol.cm2.hr, col = temp))+
+  geom_point()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound + timepoint)+
+  ggtitle("Respiration ~ Initial size")
+
+ggplot(data = data2, aes( x = timepoint, y = umol.cm2.hr, col = wound))+ geom_boxplot()
+
+
+ggplot(data = data2, aes( x = timepoint, y = umol.cm2.hr, col = temp))+ geom_boxplot()
+ 
+
+ggplot(data = data2, aes( x = timepoint, y = umol.cm2.hr, col = wound))+ geom_boxplot()+
+ facet_wrap(~temp)
+
+ggplot(data = data2, aes( x = timepoint, y = umol.cm2.hr, shape = wound))+
+  stat_summary( fun = "mean", geom = "point", size = 2.5, position = position_dodge(width = 0.1))+
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+
+  geom_smooth(method='lm')+ facet_wrap(~temp + wound)
+
+ggplot(data = data2, aes( x = timepoint, y = umol.cm2.hr, shape = wound))+
+   stat_summary(
+     fun.data = "mean_cl_boot",
+     geom = "crossbar",
+     colour = "red", width = 0.3
+   )+
+  stat_summary( fun = "mean", geom = "line", width = 0.3, linetype = "dashed", col = "red", aes(group = wound))+
+  geom_smooth(method='lm')+ facet_wrap(~temp + wound)
+
+ggplot(data = data2, aes(x = timepoint, y = umol.cm2.hr, col = temp))+
+  geom_boxplot()+
+  geom_smooth(method='lm')+
+  facet_wrap(~wound)+
+  ggtitle("Respiration")
 
 #i think i need to look at raw respiration rates that are not standardized by SA
 ```
 
-# Raw Respiration Rates by initial and final coral size (surface area and weight)
+# Respiraiton Rate of all corals at day 0 because this was before any treatment 
 
 ```{r}
+data2%>%filter(timepoint == "day0")-> baseline.resp
+
+summary(baseline.resp$umol.cm2.hr)
 
 ```
 
 
+# Read in complete photosynthesis data from each timepoint, all of these rates are standardized by geometric surface area measurements
+```{r}
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output")
+read.csv("Standardized_TimepointSA/Photosynthesis/norm_photo_initial.csv")%>%select(coral_num, umol.cm2.hr, Rate.ln, Temp.C, temp, wound)%>%mutate(timepoint = "day0") -> P1 
+read.csv("Standardized_TimepointSA/Photosynthesis/norm_photo_24.csv")%>%select(coral_num, umol.cm2.hr, Rate.ln, Temp.C, temp, wound)%>%mutate(timepoint = "day1") -> P2
+read.csv("Standardized_PostwoundSA/Photosynthesis/norm_photo_day10.csv")%>%select(coral_num, umol.cm2.hr, Rate.ln, Temp.C, temp, wound)%>%mutate(timepoint = "day10") -> P3
+read.csv("Standardized_PostwoundSA/Photosynthesis/norm_photo_final.csv")%>%select(coral_num, umol.cm2.hr, Rate.ln, Temp.C, temp, wound)%>%mutate(timepoint = "day19") -> P4
+
+rbind(P1, P2, P3, P4) -> All.Photosynthesis
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17)
+# Remove rows based on the condition
+All.Photosynthesis.Clean <- All.Photosynthesis[!(All.Photosynthesis$coral_num %in% corals_to_remove), ]
+#write.csv(All.Photosynthesis.Clean, "Photosynthesis/full.photo.data.clean.postwoundnorm.csv")
+```
+
+# plot photosynthesis rates (standardized)
+```{r}
+data3<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Photosynthesis/full.photo.data.clean.postwoundnorm.csv")%>%select(-X)%>%rename(coral_id = coral_num)
+genotype$coral_id<- as.character(genotype$coral_id)
+data3$coral_id<- as.character(data3$coral_id)
+
+data3%>%left_join(genotype, by = "coral_id")%>%mutate(wound = as.factor(wound), 
+                                                     timepoint = as.factor(timepoint),
+                                                     temp = as.factor(temp))-> data3
+
+ggplot(data = data3%>%filter(!timepoint == "day0"), aes(x= wound, y = umol.cm2.hr, fill = wound))+
+  geom_boxplot()+ggtitle("Photosynthesis Rate")
+
+ggplot(data = data3, aes(x = wound, y = umol.cm2.hr, fill = wound))+ 
+  geom_boxplot()+
+  facet_wrap(~timepoint)
+
+ggplot(data = data3, aes(x = temp, y = umol.cm2.hr, fill = temp))+ 
+  geom_boxplot()+
+  facet_wrap(~timepoint)
+
+ggplot(data = data3, aes(x = wound, y = umol.cm2.hr, fill = temp))+ 
+  geom_boxplot()+
+  facet_wrap(~timepoint)
+
+ggplot(data = data3, aes(x = temp, y = umol.cm2.hr, shape = wound, col = wound))+ 
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
+  facet_wrap(~timepoint)+ 
+  theme_classic()+
+  ggtitle("Mean Photosynthesis Rate")
+
+
+ggplot(data = data3, aes(x = wound, y = umol.cm2.hr, fill = temp))+
+  stat_summary( fun = "mean", geom = "bar", position = position_dodge(width = 1))+
+  facet_wrap(~timepoint)+ 
+  theme_classic()+
+  ggtitle("Mean Photosynthesis Rate")
+
+ggplot(data = data3, aes(x = timepoint, y = umol.cm2.hr, fill = wound))+
+  stat_summary( fun = "mean", geom = "bar", position = position_dodge(width = 1))+
+  facet_wrap(~temp)+ 
+  theme_classic()+
+  ggtitle("Mean Photosynthesis Rate")
+
+ggplot(data = data3, aes(x = timepoint, y = umol.cm2.hr, col = wound))+
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+
+  facet_wrap(~temp)+ 
+  theme_classic()+
+  ggtitle("Mean Photosynthesis Rate")
+
+ggplot(data = data3, aes(x = timepoint, y = umol.cm2.hr, col = wound))+ geom_point()+
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+
+  facet_wrap(~temp)+ 
+  theme_classic()+
+  ggtitle("Photosynthesis Rate")
+
+
+```
+
+
+#Combine R and P to plot together by timepoint 
+```{r}
+All.Respiration.Clean$rate <- "Respiration"
+All.Photosynthesis.Clean$rate <- "Photosynthesis"
 
 
 
+```
 

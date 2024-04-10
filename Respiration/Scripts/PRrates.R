@@ -288,7 +288,7 @@ Photosynthesis$chamber_vol <- Photosynthesis$chamber_vol/1000 #calculate volume
 #Account for chamber volume to convert from umol L-1 s-1 to umol s-1. This standardizes across water volumes (different because of coral size) and removes per Liter
 Photosynthesis$umol.sec <- Photosynthesis$umol.L.sec*Photosynthesis$chamber_vol
 
-# Extract rows with blank data from respiration data frame
+# Extract rows with blank data from data frame
 blankrows <- c(117, 118, 119, 120, 77, 78, 79, 80, 40, 39, 38, 37)
 blank_rates <- Photosynthesis[blankrows, ]%>% 
   rename(blank_id = coral_id)%>%

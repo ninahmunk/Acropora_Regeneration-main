@@ -13,32 +13,36 @@ library(dplyr)
 library(janitor)
 library(ggplot2)
 library(stringr)
+library(lme4)
+library(emmeans)
+library(car)
 
 ```
 
-# Load in the data + make some basic plots
+# DARKHOURS: Load in the data + make some basic plots
 ```{r}
-data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/wound_closure_measurements.csv")%>%clean_names()
+data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/darkhours/wound_closure_measurements.csv")%>%clean_names()
 
 data$time_point_initial[data$time_point_initial == "say14"] <- "day14"
 
 
-ggplot(data = data, aes(x = area_mm2, y = perimeter))+geom_point()
+ggplot(data = data, aes(x = area_mm2, y = perimeter))+geom_point()+ggtitle("Wound Perimeter x Area")
 
-ggplot(data = data, aes(x = area_mm2, y = ferets_diameter_mm))+geom_point()
+ggplot(data = data, aes(x = area_mm2, y = ferets_diameter_mm))+geom_point()+ggtitle("Wound Diameter x Area")
 
+#divide perimeter by area to get ratio P:A
 data<- data%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(time_point_initial = as.factor(time_point_initial))
 
 #desired_order<- c("initial", "day7", "day14", "final")
 data$time_point_initial <- factor(data$time_point_initial, levels = c("initial", "day7", "day14", "final"))
 
-ggplot(data = data, aes(x = time_point_initial, y = P.A))+geom_point()
+ggplot(data = data, aes(x = time_point_initial, y = P.A))+geom_boxplot()+ggtitle("Perimeter:Area Ratio - P getting larger as wound closes")
 
 
 ```
-#load in sample info and join with data
+## DARKHOURS:load in sample info and join with data
 ```{r}
-samp.info<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/darkhours_mastersheetcsv.csv")
+samp.info<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/darkhours/darkhours_mastersheetcsv.csv")
 
 data2<- left_join(data, samp.info, by = "coral_id")
 
@@ -46,15 +50,15 @@ data2<- left_join(data, samp.info, by = "coral_id")
 
 
 
-# Area 
+# DARKHOURS:Area 
 ```{r}
-ggplot(data = data2, aes(x = time_point_initial, y = area_mm2))+geom_point()+facet_wrap(~temp)
+ggplot(data = data2, aes(x = time_point_initial, y = area_mm2))+geom_boxplot()+facet_wrap(~temp)
 ```
-# Presence of Apical Polyps 
+# DARKHOURS:Presence of Apical Polyps 
 ```{r}
 data2 <- data2 %>% mutate(apical_polyp_tentacles = str_squish(apical_polyp_tentacles)) 
 
-ggplot(data = data2, aes(y = apical_polyp_tentacles))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)
+ggplot(data = data2, aes(x = apical_polyp_tentacles))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial, ncol = 4)+ ggtitle("Presence of Apical Polyp")
 
 data2%>%filter(time_point_initial == "day14")-> filtered
 
@@ -62,28 +66,31 @@ ggplot(data = filtered, aes(x =apical_polyp_tentacles))+geom_bar()+facet_wrap(~t
 ```
 
 
-# Number of new polyps 
+# DARKHOURS:Number of new polyps 
 ```{r}
-ggplot(data = data2, aes(y = num_new_polyps))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)
+ggplot(data = data2, aes(x = num_new_polyps))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial, ncol= 4)+ggtitle("number of new polyps")
 
-ggplot(data = data2, aes(x = time_point_initial, y = num_new_polyps))+geom_point()+facet_wrap(~temp)
+ggplot(data = data2, aes(x = time_point_initial, y = num_new_polyps))+geom_boxplot()+facet_wrap(~temp)+ggtitle("number of new polyps")
 ```
-# Analysis of main ACR regen project 
+# Wound healing analysis of main ACR regen project 
 
 ```{r}
-data3<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/big_n_closure.csv")%>%clean_names()%>%slice(-45, -46, -47, -48)
+data3<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/fragment.only.measurements.csv")%>%clean_names()%>%slice(-45, -46, -47, -48)
 
-ggplot(data = data3, aes(x = area_mm2, y = perimeter))+geom_point()
+data3$time_point_initial <- factor(data3$time_point_initial, levels = c("initial", "24hr", "day10", "final"), labels = c("0", "1", "10", "19")) 
 
-ggplot(data = data3, aes(x = area_mm2, y = ferets_diameter_mm))+geom_point()
+ggplot(data = data3, aes(x = area_mm2, y = perimeter, col = time_point_initial))+geom_point()+ggtitle("perimeter x area")+geom_smooth(method = "lm")
 
-data3<- data3%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(time_point_initial = as.factor(time_point_initial))%>% replace(is.na(.), 0)
+ggplot(data = data3, aes(x = area_mm2, y = ferets_diameter_mm, col = time_point_initial))+geom_point()+ggtitle("diameter x area")+geom_smooth(method = "lm")
 
-data3$time_point_initial <- factor(data3$time_point_initial, levels = c("initial", "24hr", "day10", "final"))
+data3<- data3%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(time_point_initial = as.factor(time_point_initial))%>%replace(is.na(.), 0)
 
-ggplot(data = data3, aes(x = time_point_initial, y = P.A))+geom_point()
+ggplot(data = data3, aes(x = time_point_initial, y = P.A))+geom_boxplot()+ggtitle("Perimeter:Area Ratio")
 
-
+wound.measurements.model<- lm(area_mm2 ~ perimeter + time_point_initial, data = data3)
+summary(wound.measurements.model)
+pairwise_comparisons <- emmeans(wound.measurements.model, pairwise ~ time_point_initial, adjust = "tukey")
+summary(pairwise_comparisons)
 
 
 ```
@@ -91,24 +98,161 @@ ggplot(data = data3, aes(x = time_point_initial, y = P.A))+geom_point()
 ```{r}
 samp.info2<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")
 data4<- left_join(data3, samp.info2, by = "coral_id")
-ggplot(data = data4, aes(x = time_point_initial, y = area_mm2))+geom_point()+facet_wrap(~temp)
+
+healed<- data4%>%filter(time_point_initial == '19')
+not.healed<-data4%>%filter(time_point_initial == "10")
+
+day10model.area<- lm(area_mm2~temp, data = not.healed)
+summary(day10model.area)
+day10model.peri<- lm(perimeter~temp, data = not.healed)
+summary(day10model.peri)
+day10model.dia<- lm(ferets_diameter_mm~temp, data = not.healed)
+summary(day10model.dia)
+
+ggplot(data = data4, aes(x = time_point_initial, y = area_mm2))+geom_boxplot()+facet_wrap(~temp)+ggtitle("Wound Closure (area), Frag only")
+
+ggplot(data = data4, aes(x = time_point_initial, y = perimeter))+geom_boxplot()+facet_wrap(~temp)+ggtitle("Wound Closure (perimeter), Frag only")
+
+ggplot(data = data4, aes(x = area_mm2, y = perimeter, col = time_point_initial))+geom_point()+ggtitle("perimeter x area")+geom_smooth(method = "lm")+ facet_wrap(~temp)
+
+ggplot(data = data4, aes(x = area_mm2, y = ferets_diameter_mm, col = time_point_initial))+geom_point()+ggtitle("diameter x area")+geom_smooth(method = "lm")+ facet_wrap(~temp)
+
+ggplot(data = data4, aes(x = area_mm2, y = perimeter, col = temp))+geom_point()+ggtitle("perimeter x area")+geom_smooth(method = "lm")+ facet_wrap(~time_point_initial)
+
+ggplot(data = data4, aes(x = area_mm2, y = ferets_diameter_mm, col = temp))+geom_point()+ggtitle("diameter x area")+geom_smooth(method = "lm")+ facet_wrap(~time_point_initial)
+
+wound.measurements.nott.model<- lm(area_mm2 ~ perimeter + time_point_initial, data = data4)
+wound.measurements.tt.model<- lm(area_mm2 ~ perimeter + time_point_initial + temp, data = data4)
+
+AIC(wound.measurements.nott.model,wound.measurements.tt.model) #model with temperature has lower AIC 
+
+summary(wound.measurements.tt.model)
+pairwise_comparisons.tt <- emmeans(wound.measurements.tt.model, pairwise ~ time_point_initial*temp, adjust = "tukey")
+summary(pairwise_comparisons.tt)
+
+area.model<- lm(area_mm2~temp + time_point_initial, data = data4)
+summary(area.model)
+area.pairwise<- emmeans(area.model, pairwise ~temp*time_point_initial, adjust = "tukey")
+summary(area.pairwise)
+perimeter.model<- lm(perimeter~temp + time_point_initial, data = data4)
+summary(perimeter.model)
+diameter.model<- lm(ferets_diameter_mm~temp + time_point_initial, data = data4)
+summary(diameter.model)
 
 
 ```
+
+## making tables of the wound measurement metrics
+```{r}
+data4%>%filter(temp == "A") -> data4.ambient
+data4%>%filter(temp == "H") -> data4.hot
+# Aggregate the data by time_point_initial and calculate mean and standard deviation for each variable
+summary_table_ambient <- aggregate(. ~ time_point_initial, data = data4.ambient[, c("area_mm2", "perimeter", "ferets_diameter_mm", "time_point_initial")],
+                           function(x) c(mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE)))
+
+# Flatten the resulting data frame for better readability
+summary_table_ambient <- do.call(data.frame, summary_table_ambient)
+
+# Rename the columns for better clarity
+colnames(summary_table_ambient) <- c("Day", 
+                             "Mean Area", "Area SD", 
+                             "Mean Perimeter", "Perimeter SD", 
+                             "Mean Ferets Diameter", "Ferets Diameter SD")
+
+# Display the summary table
+print(summary_table_ambient)
+
+# Export the summary table to a CSV file
+#write.csv(summary_table_ambient, "/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Output/summary_table_ambient.csv", row.names = FALSE)
+
+summary_table_hot <- aggregate(. ~ time_point_initial, data = data4.hot[, c("area_mm2", "perimeter", "ferets_diameter_mm", "time_point_initial")],
+                           function(x) c(mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE)))
+
+# Flatten the resulting data frame for better readability
+summary_table_hot <- do.call(data.frame, summary_table_hot)
+
+# Rename the columns for better clarity
+colnames(summary_table_hot) <- c("Day", 
+                             "Mean Area", "Area SD", 
+                             "Mean Perimeter", "Perimeter SD", 
+                             "Mean Ferets Diameter", "Ferets Diameter SD")
+
+# Display the summary table
+print(summary_table_hot)
+
+# Export the summary table to a CSV file
+#write.csv(summary_table_hot, "/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Output/summary_table_hot.csv", row.names = FALSE)
+
+
+```
+
+
 
 ```{r}
 data4 <- data4 %>% mutate(apical_polyp_tentacles = str_squish(apical_polyp_tentacles))
 
-ggplot(data = data4, aes(y = apical_polyp_tentacles))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)
+ggplot(data = data4, aes(x = apical_polyp_tentacles))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)+ggtitle("Presence of Apical Polyp Tentacles")
 
 data4%>%filter(time_point_initial == "day10")-> filtereddata
 
-ggplot(data = filtereddata, aes(x =apical_polyp_tentacles))+geom_bar()+facet_wrap(~temp)
+ggplot(data = filtereddata, aes(x =apical_polyp_tentacles))+geom_bar()+facet_wrap(~temp)+ggtitle("Presence of Apical Polyp Tentacles - Day 10")
 ```
 # number of new polyps
 ```{r}
-ggplot(data = data4, aes(x = num_new_polyps))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)
+ggplot(data = data4, aes(x = num_new_polyps))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial, ncol= 4)+ggtitle("Number of new polyps")
 
-ggplot(data = data4, aes(x = time_point_initial, y = num_new_polyps))+geom_point()+facet_wrap(~temp)
+ggplot(data = data4, aes(x = time_point_initial, y = num_new_polyps))+geom_boxplot()+facet_wrap(~temp)+ggtitle("Number of new polyps")
 ```
+# MAIN PROJ: Fragment and Abrasion analysis
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/all.wounds.csv")%>%left_join(samp.info2, "coral_id")-> data5
+
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv") -> SA
+
+data5%>%left_join(SA, "coral_id")-> data5
+data5[data5 == "no"] <- "0"
+data5[data5 == "no "] <- "0"
+data5[data5 == "yes"] <- "1"
+data5[data5 == " yes"] <- "1"
+data5[data5 == "nyes"] <- "1"
+data5[data5 == "initial"] <- "0"
+data5[data5 == "24hr"] <- "1"
+data5[data5 == "day10"] <- "10"
+data5[data5 == "final"] <- "19"
+
+data5%>%mutate(radial_coralite_structure = as.factor(radial_coralite_structure), 
+               radial_coralite_polyps = as.factor(radial_coralite_polyps),
+               apical_coralite.structure = as.factor(apical_coralite.structure),
+               healed = as.factor(healed),
+               tissue_over_wound = as.factor(apical_coralite.structure),
+               wound = as.factor(wound),
+               temp = as.factor(temp),
+               genotype = as.factor(genotype))%>%select(-wound_type)-> data5
+
+ggplot(data = data5%>%filter(time_point == "10"), aes(x = SA_post_wound, y = healed, col = temp))+ geom_point()+facet_wrap(~wound)+ggtitle("Healed status Day 10")+theme_classic()
+ggplot(data = data5%>%filter(time_point == "10"), aes(x = wound, fill = healed))+ geom_bar() +facet_wrap(~temp)
+
+
+
+```
+# MAIN PROJ: stats for day 10 healing results 
+```{r}
+m1<- glm(healed ~ temp*wound, data = data5%>%filter(time_point == "10"), family = binomial)
+summary(m1)
+m2<- glm(healed ~ temp + wound, data = data5%>%filter(time_point == "10"), family = binomial)
+summary(m2)
+
+
+AIC(m1, m2) # only thing that matters is which one is lower and to be actually lower, needs to be a difference of 2. can see model 2 is better 
+
+emmeans_results <- emmeans(m2, ~ wound)
+# Display the EMMs
+print(emmeans_results)
+# Pairwise comparisons for the levels within each predictor
+pairwise_results <- pairs(emmeans_results)
+# Display the pairwise comparisons
+print(pairwise_results)
+```
+
+
 
