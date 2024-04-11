@@ -142,12 +142,27 @@ summary(diameter.model)
 
 ```
 
-## making tables of the wound measurement metrics
+# calculating percent wound closure
 ```{r}
 data4%>%filter(temp == "A") -> data4.ambient
 data4%>%filter(temp == "H") -> data4.hot
+
+data4.ambient%>%filter(time_point_initial == 0)%>%select(coral_id, area_mm2)%>%rename(initial.area = area_mm2) -> ambient.initial
+ambient.initial%>%left_join(data4.ambient, by = "coral_id") -> data4.ambient
+
+data4.ambient%>%mutate(percent.wound.closure = ((area_mm2 - initial.area) / initial.area)*100) -> data4.ambient
+
+data4.hot%>%filter(time_point_initial == 0)%>%select(coral_id, area_mm2)%>%rename(initial.area = area_mm2) -> hot.initial
+hot.initial%>%left_join(data4.hot, by = "coral_id") -> data4.hot
+data4.hot%>%mutate(percent.wound.closure = ((area_mm2 - initial.area) / initial.area)*100) -> data4.hot
+```
+
+
+## making tables of the wound measurement metrics
+```{r}
+
 # Aggregate the data by time_point_initial and calculate mean and standard deviation for each variable
-summary_table_ambient <- aggregate(. ~ time_point_initial, data = data4.ambient[, c("area_mm2", "perimeter", "ferets_diameter_mm", "time_point_initial")],
+summary_table_ambient <- aggregate(. ~ time_point_initial, data = data4.ambient[, c("area_mm2", "perimeter", "ferets_diameter_mm", "time_point_initial", "percent.wound.closure")],
                            function(x) c(mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE)))
 
 # Flatten the resulting data frame for better readability
@@ -157,7 +172,7 @@ summary_table_ambient <- do.call(data.frame, summary_table_ambient)
 colnames(summary_table_ambient) <- c("Day", 
                              "Mean Area", "Area SD", 
                              "Mean Perimeter", "Perimeter SD", 
-                             "Mean Ferets Diameter", "Ferets Diameter SD")
+                             "Mean Ferets Diameter", "Ferets Diameter SD", "Mean % Wound Closure", "Mean % Wound Closure SD")
 
 # Display the summary table
 print(summary_table_ambient)
@@ -165,7 +180,7 @@ print(summary_table_ambient)
 # Export the summary table to a CSV file
 #write.csv(summary_table_ambient, "/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Output/summary_table_ambient.csv", row.names = FALSE)
 
-summary_table_hot <- aggregate(. ~ time_point_initial, data = data4.hot[, c("area_mm2", "perimeter", "ferets_diameter_mm", "time_point_initial")],
+summary_table_hot <- aggregate(. ~ time_point_initial, data = data4.hot[, c("area_mm2", "perimeter", "ferets_diameter_mm", "time_point_initial", "percent.wound.closure")],
                            function(x) c(mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE)))
 
 # Flatten the resulting data frame for better readability
@@ -175,7 +190,7 @@ summary_table_hot <- do.call(data.frame, summary_table_hot)
 colnames(summary_table_hot) <- c("Day", 
                              "Mean Area", "Area SD", 
                              "Mean Perimeter", "Perimeter SD", 
-                             "Mean Ferets Diameter", "Ferets Diameter SD")
+                             "Mean Ferets Diameter", "Ferets Diameter SD", "Mean % Wound Closure", "Mean % Wound Closure SD")
 
 # Display the summary table
 print(summary_table_hot)
@@ -193,7 +208,7 @@ data4 <- data4 %>% mutate(apical_polyp_tentacles = str_squish(apical_polyp_tenta
 
 ggplot(data = data4, aes(x = apical_polyp_tentacles))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial)+ggtitle("Presence of Apical Polyp Tentacles")
 
-data4%>%filter(time_point_initial == "day10")-> filtereddata
+data4%>%filter(time_point_initial == "10")-> filtereddata
 
 ggplot(data = filtereddata, aes(x =apical_polyp_tentacles))+geom_bar()+facet_wrap(~temp)+ggtitle("Presence of Apical Polyp Tentacles - Day 10")
 ```
