@@ -8,8 +8,10 @@ library(ggpubr)
 library(broom)
 library(AICcmodavg)
 library(car)
+library(lme4)
+library(lmerTest)
 
-
+setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
 #load initial PAM datasheet 
 initial<- read_xlsx("PAM/Data/20230601_initial.xlsx", sheet= "20230601")%>%clean_names()%>%
   select(c(date,genotype, id, f0,fm,fv_fm))%>%
@@ -78,9 +80,16 @@ ggplot(full.data, aes(x = timepoint, y = fv_fm, shape = wound, col = temp))+
     width = 0.2, 
     position = position_dodge(width = 0.5)
   )+
-  ggtitle("ACR Photosynthetic Efficiency")+
   ylab('Photosynthetic Efficiency (Fv/Fm)') +
   xlab('Days')
+
+#linear models
+pam.lmer<- lmer(fv_fm ~  timepoint + temp * wound + (1|coral_id), full.data ) # lower AIC
+summary(pam.lmer)
+pam.lmer2<- lmer(fv_fm ~  timepoint + temp + wound + (1|coral_id), full.data ) 
+summary(pam.lmer2)
+
+AIC(pam.lmer, pam.lmer2)
 
 #ANOVA MODELS
 

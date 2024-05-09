@@ -1,0 +1,150 @@
+---
+title: "Plotting tradeoffs between coral growth and regeneration"
+author: "Ninah Munk"
+date: "2024-05-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/Data/growthrates.csv")%>%select(-X) -> growth
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
+growth <- growth[!(growth$coral_id %in% corals_to_remove), ]
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/Data/growthrate.day10.csv")%>%select(-X)-> growth.day10
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/Data/survival.csv")%>%select(-X, -wound, -temp) -> regeneration
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/Data/percent.healed.csv")%>%select(-X) -> percent.healed
+
+```
+
+
+
+```{r}
+growth%>%left_join(regeneration, by = "coral_id")%>%drop_na()%>%mutate(growthrate = growthrate * 1000)-> data
+
+ggplot(data = data, aes(x = healed, y = growthrate))+geom_point()+geom_smooth(method = "lm", se = FALSE)+ labs(title = "Growth X Healed Status by end of Experiment", x ="Regeneration (healed vs unhealed)", y = "Growth (cm2/day)")+theme_classic()
+
+# Fit linear regression model
+model <- lm(growthrate ~ healed, data = data)
+
+# Summarize the model
+summary(model)
+
+```
+
+
+# Final timepoint regeneration status
+```{r}
+percent.healed%>%filter(time_point == 19) ->percent.regen
+
+growth%>%left_join(percent.regen, by = "coral_id")%>%drop_na()%>%mutate(growthrate = growthrate * 1000)-> data2
+
+ggplot(data = data2, aes(x = percent_healed, y = growthrate)) + geom_point() + geom_smooth( method = "lm", se = FALSE)+theme_classic()+labs(title = "Final Growth and Regeneration", x = "Regeneration (proportion healed)", y = "Growth (mg/cm2/day)")
+
+ggplot(data = data2, aes(x = percent_healed, y = growthrate)) + geom_point() + geom_smooth( method = "lm", se = FALSE)+theme_classic()+labs(title = "Final Growth and Regeneration", x = "Regeneration (proportion healed)", y = "Growth (mg/cm2/day)")+facet_wrap(~wound, labeller = labeller(wound = c("1" = "Fragmentation", "2" = "Abrasion")))
+
+ggplot(data = data2, aes(x = percent_healed, y = growthrate)) + geom_point() + geom_smooth( method = "lm", se = FALSE)+theme_classic()+labs(title = "Final Growth and Regeneration", x = "Regeneration (proportion healed)", y = "Growth (mg/cm2/day)")+facet_wrap(~temp)
+
+# Fit linear regression model
+model1 <- lm(growthrate ~ percent_healed + wound, data = data2)
+
+# Summarize the model
+summary(model1)
+
+```
+
+# day 10 regeneration status w/growth rate
+```{r}
+percent.healed%>%filter(time_point == 10) ->percent.regen.day10
+
+growth.day10%>%left_join(percent.regen.day10, by = "coral_id")%>%drop_na()-> data3
+
+ggplot(data = data3, aes(x = percent_healed, y = growthrate)) + geom_point() + geom_smooth( method = "lm", se = FALSE)+theme_classic()+labs(title = "Growth and Regeneration 10 days Post Wounding", x = "Regeneration (proportion healed)", y = "Growth (mg/cm2/day)")
+
+ggplot(data = data3, aes(x = percent_healed, y = growthrate)) + geom_point() + geom_smooth( method = "lm", se = FALSE)+theme_classic()+labs(title = "Growth and Regeneration 10 days Post Wounding", x = "Regeneration (proportion healed)", y = "Growth (mg/cm2/day)")+facet_wrap(~wound)
+
+ggplot(data = data3, aes(x = percent_healed, y = growthrate)) + geom_point() + geom_smooth( method = "lm", se = FALSE)+theme_classic()+labs(title = "Growth and Regeneration 10 days Post Wounding", x = "Regeneration (proportion healed)", y = "Growth (mg/cm2/day)")+facet_wrap(~temp)
+
+# Fit linear regression model
+model2 <- lm(growthrate ~ percent_healed, data = data3)
+
+# Summarize the model
+summary(model2)
+```
+
+## theoretical graphs
+```{r}
+
+# Generate simulated data
+growth_rate <- seq(0, 1, length.out = 100)  # Simulated growth rates ranging from 0 to 1
+regeneration <- 0.8 - 0.6 * growth_rate + rnorm(length(growth_rate), mean = 0, sd = 0.1)  # Adjusted regeneration data
+notradeoff <- rep(0.5, length(growth_rate))  # Generating a constant value of 0.5 for all growth_rate values
+
+# Create a data frame
+data <- data.frame(Growth_Rate = growth_rate, Regeneration = regeneration)
+# Create a data frame for the second line
+notradeoff<- data.frame(Growth_Rate = notradeoff, Regeneration = growth_rate)
+
+data <- na.omit(data)
+
+# Plotting using ggplot2
+ggplot(data, aes(y = Growth_Rate, x = Regeneration)) +
+  geom_point(alpha = 0) +  # Add points
+  geom_smooth(method = "lm", se = FALSE) +  # Add a linear regression line
+  labs(x = "Regeneration", y = "Growth") +  # Label axes
+  ggtitle("A trade off between growth and regeneration")+ theme_classic()+
+  theme(axis.text.x = element_blank(),  # Remove x-axis text
+    axis.text.y = element_blank(),  # Remove y-axis text
+    axis.ticks.x = element_blank(), # Remove x-axis ticks
+    axis.ticks.y = element_blank())  # Remove y-axis ticks 
+
+ggplot() +
+  geom_point(data = data, aes(x = Regeneration, y = Growth_Rate), alpha = 0) +  
+  geom_smooth(data = data, aes(x = Regeneration, y = Growth_Rate), method = "lm", se = FALSE, color = "blue") +
+  geom_point(data = notradeoff%>%filter(Regeneration < 0.66), aes(x = Regeneration, y = Growth_Rate), alpha = 0) +  
+  geom_smooth(data = notradeoff%>%filter(Regeneration < 0.66), aes(x = Regeneration, y = Growth_Rate), method = "lm", se = FALSE, color = "red") +
+  labs(x = "Regeneration", y = "Growth", title = "A trade off between growth and regeneration") +  
+  theme_classic() +
+  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) 
+
+# Plotting using ggplot2 with adjusted axes
+ggplot(data, aes(y = Growth_Rate, x = Regeneration)) +
+  geom_point(alpha = 0) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Regeneration", y = "Growth") +
+ # ggtitle("Relationship between Growth Rate and Regeneration") +
+  scale_x_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1), labels = c("Low", "", "High")) +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1), labels = c("Low", "", "High"))+ theme_classic()
+
+
+data%>%mutate(treatment = "No fish") -> data
+notradeoff%>%mutate(treatment = "With fish")-> notradeoff
+rbind(data, notradeoff) -> simulated.full
+
+ggplot(data = simulated.full, aes(x = Regeneration, y = Growth_Rate, col = treatment))+ 
+  geom_point(alpha = 0)+
+  geom_smooth(method = "lm", se = FALSE)+ 
+  labs(x = "Regeneration", y = "Growth")+  
+  theme_classic() +
+  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+
+
+ggplot(data = simulated.full, aes(x = Regeneration, y = Growth_Rate, color = treatment)) + 
+  geom_point(alpha = 0) +
+  geom_smooth(method = "lm", se = FALSE) + 
+  labs(x = "Regeneration", y = "Growth", color = "Treatment") +  
+  theme_classic() +
+  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
+  facet_wrap(~treatment, nrow = 2, labeller = labeller(treatment = c("No fish" = "H1", "With fish" = "P1"))) +
+  scale_color_manual(values = c("No fish" = "blue", "With fish" = "red"))  # Customize line colors
+
+
+  
+  
+```
+

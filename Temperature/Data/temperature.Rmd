@@ -1,0 +1,150 @@
+---
+title: "Temperature treatments in ACR regeneration experiment"
+author: "Ninah Munk"
+date: "2024-05-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(janitor)
+library(emmeans)
+library(lme4)
+library(Matrix)
+library(readxl)
+library(tidyr)
+```
+
+# Temperature Data 
+## Load raw hobo data files, rename columns, separate date/time column
+```{r}
+
+hotsump<-read.csv('21512790_hot_sump_20230703.csv')
+colnames(hotsump)[2] = "date_time"
+colnames(hotsump)[3] = "temp_c"
+
+hotsump%>%separate(col = 'date_time', into = c('date', 'time'), sep= ' ')%>%
+  select(date, time, temp_c)%>%
+  drop_na()-> hotsump_date
+
+ambientsump<-read.csv('21512796_ambient_sump_20230703.csv')
+colnames(ambientsump)[2] = "date_time"
+colnames(ambientsump)[3] = "temp_c"
+
+ambientsump%>%separate(col = 'date_time', into = c('date', "time"), sep = ' ')%>%
+  select(date, time, temp_c)%>%
+  drop_na()-> ambientsump_date
+
+
+```
+
+## Perform Mann-Whitney U test
+```{r}
+beep <- t.test(hotsump_date$temp_c, ambientsump_date$temp_c)
+print(beep)
+
+result <- wilcox.test(hotsump_date$temp_c, ambientsump_date$temp_c)
+print(result)
+
+hotsump_date%>%mutate(treatment = "elevated")-> elevated.data
+ambientsump_date%>%mutate(treatment = 'ambient')-> ambient.data
+
+rbind(elevated.data, ambient.data)-> full.temp.data
+
+
+```
+
+
+## Visualize variation in daily temperautre across each day of the experiment in the hot sump 
+```{r}
+
+ggplot(data = hotsump_date, aes(x = as.Date(date, format = "%m / %d / %Y"), y = temp_c))+
+  geom_point(size = 1, color = "red")+  
+  labs(title = "Raw temperature data - Elevated", y = "Temperature (°C)", x = "Date")+ 
+  theme_bw()
+
+
+```
+
+## create data frame with separate columns for month, day, year to calculate daily mean temperatures
+```{r}
+
+hotsump_date%>%separate(col = 'date',
+                  into = c('month', 'day', 'year'),
+                  sep= '/',
+                  remove = FALSE) -> hotsumpfull
+
+hotsumpfull%>%group_by(year, month, day, date)%>%
+  summarise(meantemp = mean(temp_c)) -> hotsump_daily_mean
+
+# Calculating mean temp for each date to plot.
+hotsumpfull%>%aggregate(temp_c ~ date, FUN = mean)-> hotsump_daily_mean
+# Calculating standard error for error bars in the plot.
+hotsumpfull%>%aggregate(temp_c ~ date, FUN = function(x) sd(x)/sqrt(length(x))) -> std_err 
+
+
+ggplot(hotsump_daily_mean, aes(x=date, y=temp_c)) +
+  geom_point(size = 1, color = "red") +
+  geom_errorbar(aes(ymin=temp_c-std_err$temp_c, ymax=temp_c+std_err$temp_c), width=.2) +
+  labs(title="Mean Daily Temperatue - Elevated", x="Date", y="Temperature (°C)")+ 
+  theme_classic()
+```
+## Visualize variation in daily temperautre across each day of the experiment in the ambient sump 
+```{r}
+ggplot(data = ambientsump_date, aes(x = as.Date(date, format = "%m / %d / %Y"), y = temp_c))+
+  geom_point(size = 1, color = "red")+  
+  labs(title = "Raw temperature data - Ambient", y = "Temperature (°C)", x = "Date")+ 
+  theme_bw()
+
+```
+
+
+```{r}
+ambientsump_date%>%separate(col = 'date',
+                  into = c('month', 'day', 'year'),
+                  sep= '/',
+                  remove = FALSE) -> ambientsumpfull
+
+ambientsumpfull%>%group_by(year, month, day, date)%>%
+  summarise(meantemp = mean(temp_c)) -> ambientsump_daily_mean
+
+# Calculating mean temp for each date to plot.
+ambientsumpfull%>%aggregate(temp_c ~ date, FUN = mean)-> ambientsump_daily_mean
+# Calculating standard error for error bars in the plot.
+ambientsumpfull%>%aggregate(temp_c ~ date, FUN = function(x) sd(x)/sqrt(length(x))) -> std_err2
+
+
+ggplot(ambientsump_daily_mean, aes(x=date, y=temp_c)) +
+  geom_point(size = 1, color = "red") +
+  geom_errorbar(aes(ymin=temp_c-std_err2$temp_c, ymax=temp_c+std_err2$temp_c), width=.2) +
+  labs(title="Mean Daily Temperatue - Ambient", x="Date", y="Temperature (°C)")+ 
+  theme_classic()
+```
+
+## join both sumps temperature data together
+```{r}
+hotsump_daily_mean%>%rename(elevated_temp_c = "temp_c")-> hotsump_daily_mean
+ambientsump_daily_mean%>%rename(ambient_temp_c = "temp_c")-> ambientsump_daily_mean
+
+hotsump_daily_mean%>%left_join(ambientsump_daily_mean, by = "date")-> mean_full
+
+ mean_full%>%pivot_longer(cols = c(elevated_temp_c, ambient_temp_c),
+               names_to = "treatment",
+               values_to = "temp_c") -> mean_full
+
+std_err%>%rename(SE = "temp_c")-> std_err
+std_err2%>%rename(SE = "temp_c")-> std_err2
+
+
+mean_full%>%filter(treatment == "elevated_temp_c")%>%left_join(std_err, by = "date")-> elevated
+mean_full%>%filter(treatment == "ambient_temp_c")%>%left_join(std_err2, by = "date")-> ambient
+
+rbind(elevated, ambient)-> sump.temp.final
+
+ggplot( data = sump.temp.final, aes(x= date, y = temp_c, col = treatment))+ geom_point(size = 1)
+
+
+```
+

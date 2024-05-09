@@ -40,7 +40,7 @@ weight.long%>%
   mutate(coral_vol = (dry_mass / (density_aragonite - density_sw))) -> skeletal.mass
 
 #clean data
-corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29)
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
 skeletal.mass.clean <- skeletal.mass[!(skeletal.mass$coral_id %in% corals_to_remove), ]
   
 # coral dry mass and volume should be positively correlated with buoyant weight
@@ -157,22 +157,22 @@ summary(stnd.curve2)$r.squared #decent rsquared
 ```{r}
 SA_postwound%>%select(coral_id, SA, SA_postwound)%>%rename(SA_initial = SA)%>%left_join(smpls%>%select(coral_id, SA)%>%rename(SA_final = SA))%>%left_join(sample.info)-> all.SA
 
-ggplot(data = all.SA, aes(x= SA_initial, y = SA_final, col = temp))+geom_point()
-
-ggplot(data = all.SA, aes(x= SA_postwound, y = SA_final, col = temp))+geom_point()+
-  stat_summary(fun.data=mean_cl_normal) + 
-  geom_smooth(method='lm', formula= y~x)
-
 stnd.curve3 <- lm(SA_initial~SA_final, data=all.SA)
 plot(SA_initial~SA_final, data=all.SA)
 stnd.curve3$coefficients
 summary(stnd.curve3)$r.squared
 
+ggplot(data = all.SA, aes(x= SA_postwound, y = SA_final, col = temp))+geom_point()+
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x)
+
+
 ```
  
-Corals weight more at day 1 post wounding then they do at initial weighing (i.e., Corals grew after initial weighing so subtracting post wound weight from initial weight to get weight of removed mass wont work). This makes sense because corals had high growth rates before exp started (see below growth rates of unwounded corals pre start of experiment). Lets standardize all postwound, day 10, and final measurements by final SA derived by wax dip method, but lets subtract geometrically calculated SA of wounds from it for standardizing the postwound(day1) measurements. 
+Corals weight more at day 1 post wounding then they do at initial weighing (i.e., Corals grew after initial weighing so subtracting post wound weight from initial weight to get weight of removed mass wont work). This makes sense because corals had high growth rates before exp started (see below growth rates of unwounded corals pre start of experiment). Below I try standardizing corals a few different ways. I subtract geometrically calculated SA of wounds from final SA for standardizing the postwound(day1) measurements. 
 
 ```{r}
+#final wax SA - wound geometric SA = post wound SA
 smpls%>%left_join(SA_to_subtract, by = "coral_id")%>%mutate(postwound.SA = SA - CSA_cm2)%>%select(coral_id, postwound.SA) -> postwound.SA
 ```
 
@@ -192,9 +192,9 @@ SA.long.clean <- SA.long[!(SA.long$coral_id %in% corals_to_remove), ]
 ```
 
 
-# Growth Rates 
+# Growth Rates analyze with varying SA standardizations
 
-## Calculate Growth Rates not normalized by SA
+## Calculate Growth Rates NOT standardized by SA
 ```{r}
 skeletal.mass.clean%>%select(coral_id, timepoint, dry_mass)%>%pivot_wider(names_from = timepoint,
               values_from = dry_mass)%>%
@@ -245,9 +245,9 @@ growth.not.normal %>%
                names_to = "exp_period",
                values_to = "growthrate")-> growth.not.normal.long
 
-ggplot(data = growth.not.normal.long, aes(x = exp_period, y = growthrate, shape = wound))+ 
+ggplot(data = growth.not.normal.long, aes(x = day1.SA, y = growthrate, shape = wound))+ 
   stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.1))+ 
-  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
+ # stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.1), linetype = "dashed", aes(group = wound))+ 
   facet_wrap(~temp)+ 
   theme_classic()+
   ggtitle("not standardized growth = mg/day")
@@ -260,7 +260,156 @@ ggplot(data = growth.not.normal.long, aes(x = day1.SA, y = growthrate, col = wou
 
 
 
+
 ```
+## WOUNDING: plot growth as change in weight not as a rate 
+```{r}
+skeletal.mass.clean%>%select(coral_id, timepoint, dry_mass)%>%left_join(all.SA, by = "coral_id") -> weight
+
+weight%>%filter(timepoint == "initial")%>%mutate(weight = dry_mass / SA_initial)-> initial.data
+weight%>%filter(!timepoint == "initial")%>%mutate(weight = dry_mass / SA_postwound)-> postwound.data
+rbind(initial.data, postwound.data) -> weight.norm
+
+weight.norm%>%filter(!wound == 0)%>%mutate(wound_status = 'wounded')-> wounded
+weight.norm%>%filter(wound == 0)%>%mutate(wound_status = 'not wounded')-> not.wounded
+rbind(wounded, not.wounded)-> weight.norm
+
+# Define a mapping from the original values to the desired numeric values
+timepoints.numeric <- c("initial" = -7, "postwound" = 1, "day10" = 10, "final" = 19)
+
+# Use mutate to create a new column with the numeric values based on the mapping
+weight.norm <- weight.norm %>%
+  mutate(timepoint_numeric = case_when(
+    timepoint %in% names(timepoints.numeric) ~ timepoints.numeric[timepoint],
+    TRUE ~ NA_real_
+  ))
+
+
+ggplot(data = weight.norm, aes(x = timepoint_numeric, y = weight, col = wound_status))+geom_point()+geom_smooth(method = 'lm')+theme_classic()
+ggplot(data = weight.norm, aes(x = timepoint_numeric, y = weight, col = as.factor(wound)))+geom_point()+geom_smooth(method = 'lm')
+# FILTERING OUT INITIAL TIMEPOINT 
+ggplot(data = weight.norm%>%filter(!timepoint == "initial"), aes(x = timepoint_numeric, y = weight, col = wound_status))+geom_point()+geom_smooth(method = 'lm')+theme_classic()
+ggplot(data = weight.norm%>%filter(!timepoint == "initial"), aes(x = timepoint_numeric, y = weight, col = as.factor(wound)))+geom_point()+geom_smooth(method = 'lm')+theme_classic()+facet_wrap(~temp)+  
+  labs(title = "Change in Weight", y = "Weight (g/cm2)", x = "Day")
+
+
+
+```
+# glm(weight~time*wound)
+WOUNDING: plot growth rate, weights were standardized to g/cm2 accounting for wounding treatments above so now can look at growth rate across entire experiment 
+```{r}
+weight.norm%>%filter(!timepoint == "postwound", !timepoint == "day10")%>%select(-dry_mass, -SA_initial, -SA_postwound, -SA_final, -timepoint_numeric)%>%pivot_wider(names_from = timepoint, values_from = weight)-> weight.norm.wide
+
+weight.norm.wide%>%mutate(growthrate = (final - initial)/26)%>%pivot_longer(cols = c(initial, final), names_to = "timepoint", values_to = "weight") -> weight.norm.long
+
+ggplot(data = weight.norm.long, aes(x = wound_status, y = growthrate, col = wound_status))+geom_boxplot()
+ggplot(data = weight.norm.long, aes(x = as.factor(wound), y = growthrate, col = as.factor(wound)))+geom_boxplot()
+
+# FILTERING OUT INITIAL TIMEPOINT 
+weight.norm%>%filter(!timepoint == "initial", !timepoint == "day10")%>%select(-dry_mass, -SA_initial, -SA_postwound, -SA_final, -timepoint_numeric)%>%pivot_wider(names_from = timepoint, values_from = weight)-> weight.norm.wide2
+
+weight.norm.wide2%>%mutate(growthrate = (final - postwound)/19)%>%pivot_longer(cols = c(postwound, final), names_to = "timepoint", values_to = "weight")%>%filter(timepoint == "final")%>%mutate(growthrate = growthrate*1000) -> weight.norm.long2
+
+ggplot(data = weight.norm.long2, aes(x = wound_status, y = growthrate, col = wound_status))+geom_boxplot()+theme_classic()+labs(x = "Wound Status", y = "Growth (mg/cm2/day)")
+ggplot(data = weight.norm.long2, aes(x = as.factor(wound), y = growthrate, col = as.factor(wound)))+geom_boxplot()
+ggplot(data = weight.norm.long2, aes(x = as.factor(wound), y = growthrate, col = as.factor(wound)))+geom_boxplot()+facet_wrap(~temp)
+
+```
+```{r}
+# FILTERING OUT INITIAL TIMEPOINT 
+weight.norm%>%filter(!timepoint == "initial", !timepoint == "final")%>%select(-dry_mass, -SA_initial, -SA_postwound, -SA_final, -timepoint_numeric)%>%pivot_wider(names_from = timepoint, values_from = weight)-> weight.norm.wide3
+
+weight.norm.wide3%>%mutate(growthrate = (day10 - postwound)/10)%>%pivot_longer(cols = c(postwound, day10), names_to = "timepoint", values_to = "weight")%>%filter(timepoint == "day10")%>%mutate(growthrate = growthrate*1000) -> weight.norm.long3
+
+ggplot(data = weight.norm.long3, aes(x = wound_status, y = growthrate, col = wound_status))+geom_boxplot()+theme_classic()+labs(x = "Wound Status", y = "Growth (mg/cm2/day)")
+ggplot(data = weight.norm.long3, aes(x = as.factor(wound), y = growthrate, col = as.factor(wound)))+geom_boxplot()
+ggplot(data = weight.norm.long3, aes(x = as.factor(wound), y = growthrate, col = as.factor(wound)))+geom_boxplot()+facet_wrap(~temp)
+```
+
+
+
+#aov w tukey but check normality 
+## TEMPERATURE: plot growth as change in weight not as a rate w respect to temp treatment
+```{r}
+ggplot(data = weight.norm, aes(x = timepoint_numeric, y = weight, col = temp))+geom_point()+geom_smooth(method = "lm")
+ggplot(data = weight.norm.long, aes(x = temp, y = growthrate, col = temp))+geom_boxplot()
+
+
+# FILTERING OUT INITIAL TIMEPOINT 
+ggplot(data = weight.norm%>%filter(!timepoint == "initial"), aes(x = timepoint_numeric, y = weight, col = temp))+geom_point()+geom_smooth(method = "lm")
+ggplot(data = weight.norm.long2, aes(x = temp, y = growthrate, col = temp))+geom_boxplot()
+```
+
+```{r}
+weight.norm%>%unite("treatment", wound:temp, remove = F) -> weight.norm.interaction
+weight.norm.long%>%unite("treatment", wound:temp, remove = F) -> weight.norm.interaction.long
+weight.norm.long2%>%unite("treatment", wound:temp, remove = F) -> weight.norm.interaction.long2
+
+ggplot(data = weight.norm.interaction, aes(x = timepoint_numeric, y = weight, col = treatment))+geom_point()+geom_smooth(method = "lm")
+ggplot(data = weight.norm.interaction.long, aes(x = as.factor(wound), y = growthrate, col = temp))+geom_boxplot()
+ggplot(data = weight.norm.interaction.long, aes(x = treatment, y = growthrate, col = treatment))+geom_boxplot()
+
+# FILTERING OUT INITIAL TIMEPOINT 
+ggplot(data = weight.norm.interaction%>%filter(!timepoint == "initial"), aes(x = timepoint_numeric, y = weight, col = treatment))+geom_point()+geom_smooth(method = "lm")
+ggplot(data = weight.norm.interaction.long2, aes(x = as.factor(wound), y = growthrate, col = temp))+geom_boxplot()
+ggplot(data = weight.norm.interaction.long2, aes(x = treatment, y = growthrate, col = treatment))+geom_boxplot()
+ggplot(data = weight.norm.interaction.long2, aes(x = as.factor(wound), y = growthrate, col = temp))+geom_boxplot()
+
+```
+
+#aov + tukey 
+```{r}
+hist(weight.norm.interaction.long2$growthrate)
+shane<- aov(growthrate ~ treatment, data = weight.norm.interaction.long2%>%filter(timepoint == "final"))
+plot(shane)
+summary(shane)
+TukeyHSD(shane)
+# only report p value from aov 
+```
+
+
+# code from adrian on orthogonal contrasts
+```{r}
+weight.norm.interaction.long2%>%filter(timepoint == "final")%>%select(-timepoint)%>%mutate(treatment = as.factor(treatment), wound = as.factor(wound)) -> growthrate
+ggplot(data = growthrate, aes(x = treatment, y = growthrate, col = treatment))+geom_boxplot()
+# Perform ANOVA
+growth.model <- aov(data = growthrate, growthrate ~ treatment)
+
+#these next 2 lines of code do the same thing 
+TukeyHSD(growth.model)
+#comp <- glht(growth.model, linfct = mcp(treatment = "Tukey"))
+#summary(comp)
+
+ancova_model <- aov(growthrate ~ as.factor(wound) + temp, data = growthrate)
+TukeyHSD(ancova_model)
+
+# Adjusted p-values for multiple comparisons
+# This plot helps visualize if there are any significant differences between groups after adjustments.
+#plot(comp)
+
+# Step 3: Plot data with significant letters
+# Calculating mean growth for each group to plot.
+growthrate%>%aggregate(growthrate ~ treatment, FUN=mean)-> meangrowthrate
+# Calculating standard error for error bars in the plot.
+growthrate%>%aggregate(growthrate ~ treatment, FUN = function(x) sd(x)/sqrt(length(x))) -> std_err 
+
+# Assuming all contrasts were significant for simplicity; this may change based on actual results.
+meangrowthrate$letter <- c("a", "a", "a","a", "a", "a")
+
+# Plotting
+# Creating a bar plot with error bars and significant letters to clearly show the differences between groups.
+# Using specified fill colors for clarity.
+ggplot(meangrowthrate, aes(x=treatment, y=growthrate, label=letter)) +
+  geom_bar(stat="identity", fill=c("gray", "skyblue", "darkblue","purple", "pink", "orange")) +
+  geom_errorbar(aes(ymin=growthrate-std_err$growthrate, ymax=growthrate+std_err$growthrate), width=.2) +
+  geom_text(aes(label=letter), nudge_y=0.0005, color="red") +
+  labs(title="Mean Coral Growth", x="Treatment", y="Growth (g/cm^2/day)")+ 
+  scale_x_discrete(labels = c('No Wound, Ambient','No Wound, Hot','Fragmentation, Ambient', 'Fragmentation, Hot', 'Abrasion, Ambient', 'Abrasion, Hot'))+
+  theme_classic()
+
+```
+
+
 
 
 ```{r}
@@ -283,9 +432,7 @@ print(pairwise_results)
 
 ```
 
-
-
-## Normalize growth by timepoint specific SA
+## Growth rate standardized by post wound and final SA 
 ```{r}
 growth%>%mutate(full.growth.rate = (full.growth / final.SA),
                 pt1.growth.rate = (pt1.growth / day1.SA),
@@ -357,7 +504,7 @@ ggplot(data = growth1.normal.long, aes(x = wound, y = growthrate, fill = temp))+
 
 
 ```
-#models for effect of treatments and interaction of treatments: m1) for growth rate across entire exp, m2) growth rate during pt1, and m3) growth rate during pt 2
+# models for effect of treatments and interaction of treatments: m1) for growth rate across entire exp, m2) growth rate during pt1, and m3) growth rate during pt 2
 ```{r}
 #temperature, wounding, and the interactions as fixed effects and genotype (parent colony) as random effects.
 growth1.normal$genotype<- as.factor(growth1.normal$genotype)
@@ -434,7 +581,7 @@ print(pairwise_results1)
 
 
 
-## standardized by final SA only 
+# standardized by final SA only 
 ```{r}
 growth%>%mutate(full.growth.rate = (full.growth / final.SA),
                 pt1.growth.rate = (pt1.growth / final.SA),

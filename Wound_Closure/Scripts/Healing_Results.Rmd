@@ -16,6 +16,8 @@ library(stringr)
 library(lme4)
 library(emmeans)
 library(car)
+library(ggpubr)
+library(rstatix)
 
 ```
 
@@ -26,9 +28,9 @@ data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wo
 data$time_point_initial[data$time_point_initial == "say14"] <- "day14"
 
 
-ggplot(data = data, aes(x = area_mm2, y = perimeter))+geom_point()+ggtitle("Wound Perimeter x Area")
+ggplot(data = data, aes(x = area_mm2, y = perimeter))+geom_point()+ggtitle("Fig. 1 Wound Perimeter x Area")
 
-ggplot(data = data, aes(x = area_mm2, y = ferets_diameter_mm))+geom_point()+ggtitle("Wound Diameter x Area")
+ggplot(data = data, aes(x = area_mm2, y = ferets_diameter_mm))+geom_point()+ggtitle("Fig 2. Wound Diameter x Area")
 
 #divide perimeter by area to get ratio P:A
 data<- data%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(time_point_initial = as.factor(time_point_initial))
@@ -36,10 +38,13 @@ data<- data%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(tim
 #desired_order<- c("initial", "day7", "day14", "final")
 data$time_point_initial <- factor(data$time_point_initial, levels = c("initial", "day7", "day14", "final"))
 
-ggplot(data = data, aes(x = time_point_initial, y = P.A))+geom_boxplot()+ggtitle("Perimeter:Area Ratio - P getting larger as wound closes")
+ggplot(data = data, aes(x = time_point_initial, y = P.A))+geom_boxplot()+ggtitle("Fig. 3 Perimeter:Area Ratio - P:R increasing")
 
 
 ```
+Fig 1. Wound area and perimeter increase together. Fig 2. Wound diameter and area increase together. Fig 3. P:A ratio gets larger as wound heals.
+Wounds that are larger have lower P:A ratios because there is more surface area than perimeter. In the literature, wounds with low P:A ratio take longer to heal, which supports the hypothesis that resources from tissue directly boarder the lesion are responsible for wound repair AND/OR there is a limited pot of energy available for repair which large wounds exhaust AND/OR repair becomes too expensive and the colony stops fueling repair   
+
 ## DARKHOURS:load in sample info and join with data
 ```{r}
 samp.info<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/darkhours/darkhours_mastersheetcsv.csv")
@@ -52,40 +57,63 @@ data2<- left_join(data, samp.info, by = "coral_id")
 
 # DARKHOURS:Area 
 ```{r}
-ggplot(data = data2, aes(x = time_point_initial, y = area_mm2))+geom_boxplot()+facet_wrap(~temp)
+ggplot(data = data2, aes(x = time_point_initial, y = area_mm2))+geom_boxplot()+ggtitle("Fig. 1 Wound Area through time")+facet_wrap(~temp)
+
 ```
+Fig. 1 Wound area gets smaller through time (ambient n=5, hot n=5)
+
 # DARKHOURS:Presence of Apical Polyps 
 ```{r}
 data2 <- data2 %>% mutate(apical_polyp_tentacles = str_squish(apical_polyp_tentacles)) 
 
-ggplot(data = data2, aes(x = apical_polyp_tentacles))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial, ncol = 4)+ ggtitle("Presence of Apical Polyp")
+ggplot(data = data2, aes(x = apical_polyp_tentacles))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial, ncol = 4)+ ggtitle("Fig 1. Presence of Apical Polyp")
 
-data2%>%filter(time_point_initial == "day14")-> filtered
+data2%>%filter(time_point_initial == "day7")-> filtered
 
-ggplot(data = filtered, aes(x =apical_polyp_tentacles))+geom_bar()+facet_wrap(~temp)
+ggplot(data = filtered, aes(x =apical_polyp_tentacles))+geom_bar()+ggtitle("Fig 2. Day 7")+facet_wrap(~temp)
 ```
+Fig. 1 Apical polyp is at the very tip of the coral. This figure shows at each time point if that polyp was present for each coral in both temp treatments. Fig. 2 Apical polyp is visible for 2 corals at day 7 in the ambient treatment only.
 
-
-# DARKHOURS:Number of new polyps 
+# DARKHOURS: Number of new polyps 
 ```{r}
-ggplot(data = data2, aes(x = num_new_polyps))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial, ncol= 4)+ggtitle("number of new polyps")
+ggplot(data = data2, aes(x = time_point_initial, y = num_new_polyps))+geom_point(aes(col = as.factor(coral_id)))+facet_wrap(~temp)+ggtitle("Fig 1. New polyps for each coral throughout experiment") #facet wrap as individual 
 
-ggplot(data = data2, aes(x = time_point_initial, y = num_new_polyps))+geom_boxplot()+facet_wrap(~temp)+ggtitle("number of new polyps")
+ggplot(data = data2, aes(x = time_point_initial, y = num_new_polyps))+geom_boxplot(aes(fill = temp))+facet_wrap(~temp)+ggtitle("Fig 2. Number of new polyps throughout experiment")
+
+data2%>%filter(time_point_initial == "final") -> final.timepoint
+
+ggplot(data = final.timepoint, aes(x = temp, y = num_new_polyps))+ geom_boxplot(aes(fill = temp))+ggtitle("Fig 3. Number of new polyps formed between day 14 and final")
+
+# Get total num of new polyps
+# Group by coral_id and summarize to get the sum of num_new_polyps for each coral_id
+sum_polyps <- data2 %>%
+  group_by(coral_id) %>%
+  summarize(total_polyps = sum(num_new_polyps, na.rm = TRUE))
+
+# Join the sum_polyps data frame with the original data frame based on coral_id
+data2 <- left_join(data2, sum_polyps, by = "coral_id")
+
+ggplot(data = data2, aes(x = temp, y = total_polyps))+geom_boxplot(aes(fill = temp))+ggtitle("Fig 4. total number of new polyps by end of experiment")
 ```
-# Wound healing analysis of main ACR regen project 
+New polyps formed across 20 days post fragmentation wound. By the end of experiment corals in both treatments had similar number of new polyps formed (Fig. 3), but corals in the hot treatment had delayed polyp formation at beginning OR enhanced polyp formation towards end. 
+
+# Wound healing analysis of main ACR regen project - FRAG ONLY
 
 ```{r}
-data3<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/fragment.only.measurements.csv")%>%clean_names()%>%slice(-45, -46, -47, -48)
+data3<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/fragment.only.measurements.csv")%>%clean_names()
 
 data3$time_point_initial <- factor(data3$time_point_initial, levels = c("initial", "24hr", "day10", "final"), labels = c("0", "1", "10", "19")) 
 
-ggplot(data = data3, aes(x = area_mm2, y = perimeter, col = time_point_initial))+geom_point()+ggtitle("perimeter x area")+geom_smooth(method = "lm")
+ggplot(data = data3, aes(x = area_mm2, y = perimeter))+geom_point()+ggtitle("Fig. 1 Wound Perimeter x Area")
 
-ggplot(data = data3, aes(x = area_mm2, y = ferets_diameter_mm, col = time_point_initial))+geom_point()+ggtitle("diameter x area")+geom_smooth(method = "lm")
+ggplot(data = data3, aes(x = area_mm2, y = perimeter, col = time_point_initial))+geom_point()+ggtitle("Fig 2. perimeter x area")+geom_smooth(method = "lm")
 
-data3<- data3%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(time_point_initial = as.factor(time_point_initial))%>%replace(is.na(.), 0)
+ggplot(data = data3, aes(x = area_mm2, y = ferets_diameter_mm))+geom_point()+ggtitle("Fig 3. Wound Diameter x Area")
 
-ggplot(data = data3, aes(x = time_point_initial, y = P.A))+geom_boxplot()+ggtitle("Perimeter:Area Ratio")
+data3<- data3%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(time_point_initial = as.factor(time_point_initial))
+
+ggplot(data = data3, aes(x = time_point_initial, y = P.A))+geom_point()+ggtitle("Fig 4. Perimeter:Area Ratio")
+
 
 wound.measurements.model<- lm(area_mm2 ~ perimeter + time_point_initial, data = data3)
 summary(wound.measurements.model)
@@ -94,20 +122,10 @@ summary(pairwise_comparisons)
 
 
 ```
-
+# Wound healing analysis of main ACR regen project - FRAG ONLY cont.
 ```{r}
 samp.info2<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")
 data4<- left_join(data3, samp.info2, by = "coral_id")
-
-healed<- data4%>%filter(time_point_initial == '19')
-not.healed<-data4%>%filter(time_point_initial == "10")
-
-day10model.area<- lm(area_mm2~temp, data = not.healed)
-summary(day10model.area)
-day10model.peri<- lm(perimeter~temp, data = not.healed)
-summary(day10model.peri)
-day10model.dia<- lm(ferets_diameter_mm~temp, data = not.healed)
-summary(day10model.dia)
 
 ggplot(data = data4, aes(x = time_point_initial, y = area_mm2))+geom_boxplot()+facet_wrap(~temp)+ggtitle("Wound Closure (area), Frag only")
 
@@ -121,26 +139,186 @@ ggplot(data = data4, aes(x = area_mm2, y = perimeter, col = temp))+geom_point()+
 
 ggplot(data = data4, aes(x = area_mm2, y = ferets_diameter_mm, col = temp))+geom_point()+ggtitle("diameter x area")+geom_smooth(method = "lm")+ facet_wrap(~time_point_initial)
 
-wound.measurements.nott.model<- lm(area_mm2 ~ perimeter + time_point_initial, data = data4)
-wound.measurements.tt.model<- lm(area_mm2 ~ perimeter + time_point_initial + temp, data = data4)
 
-AIC(wound.measurements.nott.model,wound.measurements.tt.model) #model with temperature has lower AIC 
 
-summary(wound.measurements.tt.model)
-pairwise_comparisons.tt <- emmeans(wound.measurements.tt.model, pairwise ~ time_point_initial*temp, adjust = "tukey")
-summary(pairwise_comparisons.tt)
-
-area.model<- lm(area_mm2~temp + time_point_initial, data = data4)
-summary(area.model)
-area.pairwise<- emmeans(area.model, pairwise ~temp*time_point_initial, adjust = "tukey")
-summary(area.pairwise)
-perimeter.model<- lm(perimeter~temp + time_point_initial, data = data4)
-summary(perimeter.model)
-diameter.model<- lm(ferets_diameter_mm~temp + time_point_initial, data = data4)
-summary(diameter.model)
 
 
 ```
+```{r}
+# Fragment Wound healing statstics of main ACR regen project - FRAG ONLY cont. 
+
+# Convert 'time_point_initial' and 'coral_id' to factors (random factors)
+data4$time_point_initial <- as.factor(data4$time_point_initial)
+data4$coral_id <- as.factor(data4$coral_id)
+data4$temp <- as.factor(data4$temp)
+
+# Get levels of grouping variable 
+levels(data4$temp)
+
+# summary statistics
+data4 %>%
+  group_by(temp) %>%
+  get_summary_stats(area_mm2, type = "mean_sd")
+
+# visualize 
+bxp <- ggboxplot(data4, x = "temp", y = "area_mm2")
+bxp
+
+#check outliers
+data4 %>%
+  group_by(temp) %>%
+  identify_outliers(area_mm2) # no outliers
+
+# check normality of all groups together
+model<- lm(area_mm2 ~ temp, data = data4)
+
+ggqqplot(residuals(model))
+
+shapiro_test(residuals(model))#data is normal p> 0.05  p> 0.05
+
+#check normality within groups 
+data4 %>%
+  group_by(temp) %>%
+  shapiro_test(area_mm2) #data is normal p> 0.05 
+
+# QQ plot within groups 
+ggqqplot(data4, "area_mm2", facet.by = "temp")
+
+#check homogeneity of variance 
+plot(model, 1) #no relationship between residuals and fitted values
+
+data4%>%levene_test(area_mm2 ~ temp) # p> 0.05, assumption met, no sig difference in variance across groups 
+
+# computation of one way ANOVA
+res.aov <- data4%>%anova_test(area_mm2 ~ temp)
+
+get_anova_table(res.aov) 
+# p = 0.278, not significant 
+# ges (effect size) 2.6% of the area differences can be explained by temperature 
+
+
+
+```
+
+## repeated measures one way ANOVA 
+```{r}
+# Fragment Wound healing statstics of main ACR regen project - FRAG ONLY cont. 
+# Get levels of grouping variable 
+levels(data4$time_point_initial)
+
+# summary statistics
+data4 %>%
+  group_by(time_point_initial) %>%
+  get_summary_stats(area_mm2, type = "mean_sd")
+
+# visualize 
+bxp <- ggboxplot(data4, x = "time_point_initial", y = "area_mm2", add = "point")
+bxp
+
+#check outliers
+data4 %>%
+  group_by(time_point_initial) %>%
+  identify_outliers(area_mm2) # three outliers all coral 80, only timepoint 1 is extreme
+
+#check normality within groups 
+data4 %>%
+  group_by(time_point_initial) %>%
+  shapiro_test(area_mm2) #data is not normal for timepoints 1 and 19, p < 0.05 
+
+# QQ plot within groups 
+ggqqplot(data4, "area_mm2", facet.by = "time_point_initial")
+
+res.aov <- anova_test(data = data4, dv = area_mm2, wid = coral_id, within = time_point_initial)
+get_anova_table(res.aov)
+
+#post-hoc tests, pairwise comparisons (t.tests between lebels of the within subjects factor (i.e., time))
+
+pwc <- data4 %>%
+  pairwise_t_test(
+    area_mm2 ~ time_point_initial, paired = TRUE,
+    p.adjust.method = "bonferroni"
+    )
+pwc
+
+# Visualization: box plots with p-values
+pwc <- pwc %>% add_xy_position(x = "time")
+bxp + 
+  stat_pvalue_manual(pwc) +
+  labs(
+    subtitle = get_test_label(res.aov, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
+
+```
+
+
+```{r}
+# since normality assumption is broken for one-way anova, here I am trying the Friedman test
+
+# get summary statistics
+data4 %>%
+  group_by(time_point_initial) %>%
+  get_summary_stats(area_mm2, type = "common")
+
+# visualize 
+ggboxplot(data4, x = "time_point_initial", y = "area_mm2", add = "jitter")
+
+# computation, non-parametric friedman test 
+res.fried<- data4%>%friedman_test(area_mm2 ~ time_point_initial | coral_id)
+res.fried # area is significantly different at the different time points p <0.05 
+
+#effect size 
+data4%>%friedman_effsize(area_mm2 ~ time_point_initial | coral_id) # W = 0.65 large effect size according to Cohen's interpretation guidelines (>=0.5 is large) W = 0.65
+
+# pairwise comparisons
+pwc <- data4 %>%
+  wilcox_test(area_mm2 ~ time_point_initial, paired = TRUE, p.adjust.method = "bonferroni")
+pwc
+
+# Visualization: box plots with p-values
+pwc <- pwc %>% add_xy_position(x = "time")
+ggboxplot(data4, x = "time_point_initial", y = "area_mm2", add = "point") +
+  stat_pvalue_manual(pwc, hide.ns = TRUE) +
+  labs(
+    subtitle = get_test_label(res.fried,  detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  )
+```
+
+## Repeated Measures Two Way ANOVA
+```{r}
+# get summary statistics 
+data4 %>%
+  group_by(temp, time_point_initial) %>%
+  get_summary_stats(area_mm2, type = "mean_sd")
+
+# visualization
+bxp <- ggboxplot(
+  data4, x = "time_point_initial", y = "area_mm2",
+  color = "temp", palette = "jco"
+  )
+bxp
+# check outliers
+data4 %>%
+  group_by(temp, time_point_initial) %>%
+  identify_outliers(area_mm2) # two extreme outliers, both coral 80
+
+# normality
+data4 %>%
+  group_by(temp, time_point_initial) %>%
+  shapiro_test(area_mm2) # some groups not normal
+
+ggqqplot(data4, "area_mm2", ggtheme = theme_bw()) +
+  facet_grid(time_point_initial ~ temp, labeller = "label_both")
+
+res.aov <- anova_test(
+  data = data4, dv = area_mm2, wid = coral_id,
+  within = c(temp, time_point_initial)
+  ) # this test wont run because area has 0 values and the test expects them to be NA 
+get_anova_table(res.aov)
+
+```
+
 
 # calculating percent wound closure
 ```{r}
@@ -201,6 +379,48 @@ print(summary_table_hot)
 
 ```
 
+```{r}
+
+```
+
+
+
+# T-test to test compare mean % wound closure between ambient and hot at each timepoint  
+```{r}
+rbind(data4.ambient, data4.hot)-> test.means
+
+test.means%>%filter(time_point_initial == 1)%>%select(coral_id,temp, percent.wound.closure)%>%pivot_wider(names_from = "temp", values_from = "percent.wound.closure")-> t1
+
+test.t1 <- t.test(x = t1$A,
+                       y = t1$H,
+                       alternative = "two.sided",
+                       mu = 0, paired = FALSE, var.equal = FALSE,
+                      conf.level = 0.95)
+# Print results
+print(test.t1)
+
+
+test.means%>%filter(time_point_initial == 10)%>%select(coral_id,temp, percent.wound.closure)%>%pivot_wider(names_from = "temp", values_from = "percent.wound.closure")-> t2
+
+test.t2 <- t.test(x = t2$A,
+                       y = t2$H,
+                       alternative = "two.sided",
+                       mu = 0, paired = FALSE, var.equal = FALSE,
+                      conf.level = 0.95)
+# Print results
+print(test.t2)
+
+
+test.means%>%filter(time_point_initial == 19)%>%select(coral_id,temp, percent.wound.closure)%>%pivot_wider(names_from = "temp", values_from = "percent.wound.closure")-> t3
+
+test.t3 <- t.test(x = t3$A,
+                       y = t3$H,
+                       alternative = "two.sided",
+                       mu = 0, paired = FALSE, var.equal = FALSE,
+                      conf.level = 0.95)
+# Print results
+print(test.t3)
+```
 
 
 ```{r}
@@ -210,8 +430,9 @@ ggplot(data = data4, aes(x = apical_polyp_tentacles))+geom_bar(aes(fill = temp))
 
 data4%>%filter(time_point_initial == "10")-> filtereddata
 
-ggplot(data = filtereddata, aes(x =apical_polyp_tentacles))+geom_bar()+facet_wrap(~temp)+ggtitle("Presence of Apical Polyp Tentacles - Day 10")
+ggplot(data = filtereddata, aes(x =apical_polyp_tentacles))+geom_bar()+ggtitle("Presence of Apical Polyp Tentacles - Day 10")+facet_wrap(~temp)
 ```
+# chisquared
 # number of new polyps
 ```{r}
 ggplot(data = data4, aes(x = num_new_polyps))+geom_bar(aes(fill = temp))+facet_wrap(~time_point_initial, ncol= 4)+ggtitle("Number of new polyps")
@@ -250,6 +471,8 @@ ggplot(data = data5%>%filter(time_point == "10"), aes(x = wound, fill = healed))
 
 
 ```
+# binomial logistic regression
+
 # MAIN PROJ: stats for day 10 healing results 
 ```{r}
 m1<- glm(healed ~ temp*wound, data = data5%>%filter(time_point == "10"), family = binomial)
@@ -267,7 +490,50 @@ print(emmeans_results)
 pairwise_results <- pairs(emmeans_results)
 # Display the pairwise comparisons
 print(pairwise_results)
+
+ggplot(data5)
+```
+# how many coral were fully healed based on signs of healing 
+```{r}
+view(data5%>%filter(time_point == 19, wound == 1)) # 12/12 = 100% of fragmented corals
+view(data5%>%filter(time_point == 19, wound == 2)) # 8/12 = 67% of abrasion corals
 ```
 
+# Shane helps w survival analysis 
+```{r}
+library(ggfortify)
+library(survival)
+library(gtsummary)
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data5%>%select(coral_id, time_point, healed, wound, temp)%>%group_by(coral_id)%>%filter(lag(healed)!=1)%>%ungroup()%>%filter(healed == 1 | time_point == 19) %>% mutate(time_point = as.numeric(time_point), healed = as.character(healed), healed = as.numeric(healed))-> survival
+# survfit is model function (like  a glm), surv() function to create dependent df (when the event happened (time) and what was event (event)) as a function of wound
+survfit(Surv(time = time_point, event = healed)~ wound, data = survival) #can see median time to healing is lower for wound 1, but cant say that is sig bc no upper CI 
+summary(survfit(Surv(time = time_point, event = healed)~ wound, data = survival))
+# put model inside autoplot() to visualize, fun = event to switch direction of healing 
+autoplot(survfit(Surv(time = time_point, event = healed)~ wound, data = survival), fun = 'event') -> p1
+# cox.zph() assumption check to see if hazard ratio is changing over time (p<0.05 is bad)
+cox.zph(coxph(Surv(time_point, healed)~wound + temp, data = survival))
+# harard ratio, CI, and p value for wound 2 with respect to wound 1. HR<1, CI not crossing 1, p<0.05 all mean that at any point in time individuals with wound 2 have less probability to be healed 
+coxph(Surv(time_point, healed)~wound + temp, data = survival) %>% tbl_regression(exp = T)
+
+p1+ theme_classic()+ xlab("Time (days")+ ylab("Survival (%)")+
+  guides(fill=FALSE) +
+  labs(colour = "Wound Type") +
+  scale_color_manual(labels = c("Fragmentation", "Abrasion"), values = c(1, 2)) 
+```
+
+
+```{r}
+data5%>%mutate(radial_coralite_structure = as.character(radial_coralite_structure),
+               radial_coralite_polyps = as.character(radial_coralite_polyps),
+               apical_coralite.structure = as.character(apical_coralite.structure))%>%
+  mutate(radial_coralite_structure = as.numeric(radial_coralite_structure),
+               radial_coralite_polyps = as.numeric(radial_coralite_polyps),
+               apical_coralite.structure = as.numeric(apical_coralite.structure))-> data5
+
+data5%>%mutate(percent_healed = (radial_coralite_structure + radial_coralite_polyps + apical_coralite.structure) / 3) -> data5
+
+data5%>%select(coral_id, time_point, healed, percent_healed)-> percent.healed
+```
 
 

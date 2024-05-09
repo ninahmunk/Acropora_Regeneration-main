@@ -696,9 +696,32 @@ ggplot(data = data, aes(x = timepoint, y = umol.cm2.hr, col = wound))+ geom_poin
 
 
 ```
+```{r}
+helpme<- lmer(umol.cm2.hr ~ timepoint + temp + wound + (1|coral_id), data ) 
+summary(helpme)
+
+ggplot(data = data, aes(x = timepoint, y = umol.cm2.hr, col = wound))+geom_jitter(size = .5, alpha = .5)+
+  stat_summary(
+    fun.data = mean_se, 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = wound))+
+  ylab("Respiration Rate (umol/cm2/hr)")+
+  xlab("Timepoint (Day)")+
+  scale_x_discrete(labels = c('0','1','10', '19'))+
+  facet_wrap(~temp, labeller = labeller(temp = c("A" = "Ambient", "H" = "Hot")))+ 
+  theme_classic()+
+  scale_color_discrete(labels = c("No Wound", "Fragmentation", "Abrasion"))+
+  labs(color = "Wound Type")
+```
+
+
 # models
 ```{r}
-
+summary(glm(umol.cm2.hr ~ temp + wound + timepoint, data = data))
 data%>%filter(!timepoint == ("day0")) -> data.filtered
 hist(data.filtered$umol.cm2.hr, main = "Histogram of Respiration Rates", xlab = "umol.cm2.hr") #looks pretty normal
 qqnorm(data.filtered$umol.cm2.hr) #looks normal
@@ -973,6 +996,38 @@ ggplot(data = data3, aes(x = timepoint, y = umol.cm2.hr, col = wound))+ geom_poi
   facet_wrap(~temp)+ 
   theme_classic()+
   ggtitle("Photosynthesis Rate")
+
+
+```
+
+```{r}
+chimmy<- lmer(umol.cm2.hr ~ timepoint + temp + wound + (1|coral_id), data3)
+summary(chimmy)
+chimmy2<- lmer(umol.cm2.hr ~ timepoint + treatment + (1|coral_id), data3)
+summary(chimmy2)
+
+# Step 3: Plot data with significant letters
+# Calculating mean growth for each group to plot.
+data3%>%unite("treatment", wound:temp, remove = F) -> data3
+data3%>%aggregate(umol.cm2.hr ~ treatment, FUN = function(x) sd(x)/sqrt(length(x))) -> std_err 
+
+ggplot(data = data3, aes(x = timepoint, y = umol.cm2.hr, col = wound))+geom_jitter(size = .5, alpha = .5)+
+  stat_summary(
+    fun.data = mean_se, 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = wound))+
+  ylab("Photosynthesis Rate (umol/cm2/hr)")+
+  xlab("Timepoint (Day)")+
+  scale_x_discrete(labels = c('0','1','10', '19'))+
+  facet_wrap(~temp, labeller = labeller(temp = c("A" = "Ambient", "H" = "Hot")))+ 
+  theme_classic()+
+  scale_color_discrete(labels = c("No Wound", "Fragmentation", "Abrasion"))+
+  labs(color = "Wound Type")
+
 
 
 ```
