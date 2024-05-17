@@ -18,6 +18,8 @@ library(emmeans)
 library(car)
 library(ggpubr)
 library(rstatix)
+library(lmerTest)
+
 
 ```
 
@@ -285,7 +287,14 @@ ggboxplot(data4, x = "time_point_initial", y = "area_mm2", add = "point") +
   )
 ```
 
-## Repeated Measures Two Way ANOVA
+REPEATED MEASURES TWO WAY ANOVA --> wont run because area has 0 values and the test expects them to be NA 
+# res.aov <- anova_test(
+#   data = data4, dv = area_mm2, wid = coral_id,
+#   within = c(temp, time_point_initial)
+#   ) 
+# get_anova_table(res.aov)
+
+## Two Way MIXED ANOVA
 ```{r}
 # get summary statistics 
 data4 %>%
@@ -298,6 +307,7 @@ bxp <- ggboxplot(
   color = "temp", palette = "jco"
   )
 bxp
+
 # check outliers
 data4 %>%
   group_by(temp, time_point_initial) %>%
@@ -311,12 +321,71 @@ data4 %>%
 ggqqplot(data4, "area_mm2", ggtheme = theme_bw()) +
   facet_grid(time_point_initial ~ temp, labeller = "label_both")
 
+# homogeneity of variance 
+data4%>%
+  group_by(time_point_initial)%>%
+  levene_test(area_mm2 ~ temp) # p>0.5
+
+# homogeneity of covariances
+box_m(data4[, "area_mm2", drop = FALSE], data4$temp) #p> 0.001
+
 res.aov <- anova_test(
   data = data4, dv = area_mm2, wid = coral_id,
-  within = c(temp, time_point_initial)
-  ) # this test wont run because area has 0 values and the test expects them to be NA 
+  between = temp, within = time_point_initial
+  )
 get_anova_table(res.aov)
 
+
+
+```
+Okay.. the data is not normally distributed, theres outliers, and theres cases of 0 values. I am going to use a linear mixed effects model which i think is robust to these things 
+```{r}
+# Fit a linear mixed-effects model
+model1 <- lmer(area_mm2 ~ temp + (1|time_point_initial), data = data4)
+model2 <- lmer(area_mm2 ~ temp + (1|time_point_initial)  + (1|coral_id), data = data4)
+model3 <- lmer(area_mm2 ~ temp*time_point_initial + (1|coral_id), data = data4) # lowest AIC
+
+AIC(model1, model2, model3)
+# Check the model summary
+summary(model3)
+```
+
+## Calculating effect sizes (Cohen's D)
+```{r}
+# Extract fixed effects coefficients from the lmer model above
+fixed_effects <- fixef(model3)
+
+# Extract standard errors of fixed effects coefficients
+se_fixed_effects <- sqrt(diag(vcov(model3)))
+
+# Calculate Cohen's d for each fixed effect
+cohen_d <- fixed_effects / se_fixed_effects
+
+# Print Cohen's d for each fixed effect
+print(cohen_d)
+```
+
+```{r}
+install.packages("compute.es")
+library(compute.es)
+
+# Compute means, standard deviations, and sample sizes for each group
+means <- tapply(data4$area_mm2, list(data4$temp, data4$time_point_initial), mean)
+sds <- tapply(data4$area_mm2, list(data4$temp, df$time_point_initial), sd)
+ns <- tapply(data4$area_mm2, list(df$temp, df$time_point_initial), length)
+
+# Convert to vectors
+means_vec <- as.vector(means)
+sds_vec <- as.vector(sds)
+ns_vec <- as.vector(ns)
+
+# Calculate Cohen's d with confidence intervals
+cohen_d_result <- esci(means1 = means_vec[1:16], means2 = means_vec[17:32], 
+                       sd1 = sds_vec[1:16], sd2 = sds_vec[17:32], 
+                       n1 = ns_vec[1:16], n2 = ns_vec[17:32])
+
+# Print the result
+print(cohen_d_result)
 ```
 
 
@@ -380,15 +449,126 @@ print(summary_table_hot)
 ```
 
 ```{r}
+rbind(data4.ambient, data4.hot)-> test.means
 
+# Define a function to compute mean and standard error
+mean_se <- function(x) {
+  n <- length(x)
+  mean_val <- mean(x, na.rm = TRUE)
+  se_val <- sd(x, na.rm = TRUE) / sqrt(n)
+  c(mean = mean_val, se = se_val)
+}
+
+# Aggregate the data by time_point_initial and temp and calculate mean and standard deviation for each variable
+summary_table <- aggregate(. ~ time_point_initial + temp, 
+                                  data = test.means[, c("area_mm2", "perimeter", "ferets_diameter_mm", "percent.wound.closure", "time_point_initial", "temp")],
+                                  mean_se)
+
+# Flatten the resulting data frame for better readability
+summary_table <- do.call(data.frame, summary_table)
+
+# Rename the columns for better clarity
+colnames(summary_table) <- c("Day", "Temp",
+                                     "Area", "Area SE", 
+                                     "Perimeter", "Perimeter SE", 
+                                     "Ferets Diameter", "Ferets Diameter SE", 
+                                     "Wound Closure (%)", "Wound Closure (%) SE")
+print(summary_table)
+```
+
+```{r}
+summary_table%>%clean_names()%>%mutate(wound_closure_percent = abs(wound_closure_percent))-> summary_table
+ggplot(data = summary_table, aes(x = day, y = wound_closure_percent, color = temp))+ geom_point()
+
+# Create the ggplot object
+ggplot(summary_table, aes(x = day, y = wound_closure_percent, fill = temp)) +
+  # Add the bar plot
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.6) +
+  # Add the error bars
+  geom_errorbar(aes(ymin = wound_closure_percent - wound_closure_percent_se,
+                    ymax = wound_closure_percent + wound_closure_percent_se),
+                position = position_dodge(width = 0.9), width = 0.2) +
+  # Customize plot aesthetics
+  labs(x = "Day", y = "Wound Closure (%)", fill = "Temperature") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  scale_fill_manual(values = c("A" = "blue", "H" = "red"))  # Set custom fill colors for temperature treatments
+```
+
+# Darkhours Wound Closure
+```{r}
+
+darkdata<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/darkhours/wound_closure_measurements.csv")%>%clean_names()
+
+darkdata$time_point_initial <- factor(darkdata$time_point_initial, levels = c("initial", "day7", "day14", "final"), labels = c("0", "7", "14", "20")) 
+darkdata$time_point_initial[is.na(darkdata$time_point_initial)] <- "14"
+
+darkdata%>%select(-num_new_polyps, -apical_polyp_tentacles, -notes)%>%left_join(samp.info, by = "coral_id")-> darkdata.closure
+
+darkdata.closure%>%filter(temp == "A") -> darkdata.ambient
+darkdata.closure%>%filter(temp == "H") -> darkdata.hot
+
+darkdata.ambient%>%filter(time_point_initial == 0)%>%select(coral_id, area_mm2)%>%rename(initial.area = area_mm2) -> dark.ambient.initial
+dark.ambient.initial%>%left_join(darkdata.ambient, by = "coral_id") -> darkdata.ambient
+darkdata.ambient%>%mutate(percent.wound.closure = ((area_mm2 - initial.area) / initial.area)*100) -> darkdata.ambient
+
+darkdata.hot%>%filter(time_point_initial == 0)%>%select(coral_id, area_mm2)%>%rename(initial.area = area_mm2) -> dark.hot.initial
+dark.hot.initial%>%left_join(darkdata.hot, by = "coral_id") -> darkdata.hot
+darkdata.hot%>%mutate(percent.wound.closure = ((area_mm2 - initial.area) / initial.area)*100) -> darkdata.hot
+
+rbind(darkdata.ambient, darkdata.hot) -> darkdata.means
+
+# Aggregate the data by time_point_initial and temp and calculate mean and standard deviation for each variable
+darkdata_summary_table <- aggregate(. ~ time_point_initial + temp, 
+                                  data = darkdata.means[, c("area_mm2", "perimeter", "ferets_diameter_mm", "percent.wound.closure", "time_point_initial", "temp")],
+                                  mean_se)
+
+# Flatten the resulting data frame for better readability
+darkdata_summary_table <- do.call(data.frame, darkdata_summary_table)
+
+# Rename the columns for better clarity
+colnames(darkdata_summary_table) <- c("Day", "Temp",
+                                     "Area", "Area SE", 
+                                     "Perimeter", "Perimeter SE", 
+                                     "Ferets Diameter", "Ferets Diameter SE", 
+                                     "Wound Closure (%)", "Wound Closure (%) SE")
+print(darkdata_summary_table)
+
+darkdata_summary_table%>%clean_names()%>%mutate(wound_closure_percent = abs(wound_closure_percent))-> darkdata_summary_table
+ggplot(data = darkdata_summary_table, aes(x = day, y = wound_closure_percent, color = temp))+ geom_point()
+
+# Create the ggplot object
+ggplot(darkdata_summary_table, aes(x = day, y = wound_closure_percent, fill = temp)) +
+  # Add the bar plot
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.6) +
+  # Add the error bars
+  geom_errorbar(aes(ymin = wound_closure_percent - wound_closure_percent_se,
+                    ymax = wound_closure_percent + wound_closure_percent_se),
+                position = position_dodge(width = 0.9), width = 0.2) +
+  # Customize plot aesthetics
+  labs(x = "Day", y = "Wound Closure (%)", fill = "Temperature") +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  scale_fill_manual(values = c("A" = "blue", "H" = "red"))
+
+```
+# Models for Dark Hours fragment wound closure
+```{r}
+darkdata.closure%>%mutate(temp = as.factor(temp))%>%mutate(coral_id = as.factor(coral_id))-> darkdata.closure
+# Fit a linear mixed-effects model
+model4 <- lmer(area_mm2 ~ temp + (1|time_point_initial), data = darkdata.closure)
+model5 <- lmer(area_mm2 ~ temp + (1|time_point_initial)  + (1|coral_id), data = darkdata.closure)
+model6 <- lmer(area_mm2 ~ temp*time_point_initial + (1|coral_id), data = darkdata.closure) # lowest AIC
+
+AIC(model4, model5, model6)
+# Check the model summary
+summary(model6)
 ```
 
 
+```{r}
 
 # T-test to test compare mean % wound closure between ambient and hot at each timepoint  
-```{r}
-rbind(data4.ambient, data4.hot)-> test.means
-
 test.means%>%filter(time_point_initial == 1)%>%select(coral_id,temp, percent.wound.closure)%>%pivot_wider(names_from = "temp", values_from = "percent.wound.closure")-> t1
 
 test.t1 <- t.test(x = t1$A,
@@ -491,12 +671,11 @@ pairwise_results <- pairs(emmeans_results)
 # Display the pairwise comparisons
 print(pairwise_results)
 
-ggplot(data5)
 ```
 # how many coral were fully healed based on signs of healing 
 ```{r}
-view(data5%>%filter(time_point == 19, wound == 1)) # 12/12 = 100% of fragmented corals
-view(data5%>%filter(time_point == 19, wound == 2)) # 8/12 = 67% of abrasion corals
+#view(data5%>%filter(time_point == 19, wound == 1)) # 12/12 = 100% of fragmented corals
+#view(data5%>%filter(time_point == 19, wound == 2)) # 8/12 = 67% of abrasion corals
 ```
 
 # Shane helps w survival analysis 

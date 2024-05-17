@@ -18,13 +18,13 @@ hotsump_date <- tidyr::separate(hotsump, 'date_time',
 quartz()
 
 #visualize variation in daily temperatures across each day of the experiment in the hot sump
-hotsump_graph <- ggplot(data=hotsump_date, 
+ ggplot(data=hotsump_date, 
                         aes(x=as.Date(longdate, format = "%m / %d / %Y"), 
                             y=temp_c)) +
   geom_point(size=1, color = 'red')+ theme_bw()+ 
   theme(axis.text.x = element_text(angle=45, margin = margin(t=20, r=100)))+
   labs(title="Raw temperature data", y="Temperature (°C)", x="Date")
-hotsump_graph
+
 
 #new data frame to separate data/time column into month, day, and year 
 hotsumpfull <- hotsump_date %>%
@@ -40,8 +40,16 @@ hotsumpfull_mean <- hotsumpfull %>%
 
 head(hotsumpfull_mean)
 
+#visualize variation in daily temperatures across each day of the experiment in the hot sump
+ ggplot(data=hotsumpfull_mean, 
+                        aes(x=day, 
+                            y=meantemp)) +
+  geom_point(size=1, color = 'red')+ theme_bw()+ 
+  theme(axis.text.x = element_text(angle=45, margin = margin(t=20, r=100)))+
+  labs(title="Mean Temperature data - Elevated", y="Temperature (°C)", x="Date")
 
-
+ 
+ ####### AMBIENT
 
 ambientsump<-read.csv('21512796_ambient_sump_20230703.csv')
 colnames(ambientsump)[2] = "date_time"
@@ -57,3 +65,37 @@ ambientsump_graph <- ggplot(data=ambientsump_date,
   theme(axis.text.x = element_text(angle=45, margin = margin(t=20, r=100)))+
   labs(title="Raw temperature data", y="Temperature (°C)", x="Date")
 ambientsump_graph
+
+#new data frame to separate data/time column into month, day, and year 
+ambientsumpfull <- ambientsump_date %>%
+  tidyr::separate('longdate',
+                  into = c('month', 'day', 'year'),
+                  sep= '/',
+                  remove = FALSE)
+
+ambientsumpfull_mean <- ambientsumpfull %>%
+  group_by(year, month, day, longdate)%>%
+  summarise(meantemp = mean(temp_c))
+
+
+#visualize variation in daily temperatures across each day of the experiment in the hot sump
+ggplot(data=ambientsumpfull_mean, 
+       aes(x=day, 
+           y=meantemp)) +
+  geom_point(size=1, color = 'blue')+ theme_bw()+ 
+  theme(axis.text.x = element_text(angle=45, margin = margin(t=20, r=100)))+
+  labs(title="Mean Temperature data - Elevated", y="Temperature (°C)", x="Date")
+
+
+
+ambientsumpfull_mean%>%mutate(treatment = "Ambient") ->ambientsumpfull_mean
+hotsumpfull_mean%>%mutate(treatment = "Elevated") ->hotsumpfull_mean
+
+rbind(hotsumpfull_mean,ambientsumpfull_mean)-> all.sump.temp
+
+ggplot(data=all.sump.temp, 
+       aes((x=as.Date(longdate, format = "%m / %d / %Y")), 
+           y=meantemp, color = treatment)) +
+  geom_point(size=1,)+ theme_bw()+ 
+  theme(axis.text.x = element_text(angle=45, margin = margin(t=20, r=100)))+
+  labs(title="Mean Temperature data", y="Temperature (°C)", x="day")

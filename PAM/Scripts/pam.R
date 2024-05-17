@@ -10,6 +10,8 @@ library(AICcmodavg)
 library(car)
 library(lme4)
 library(lmerTest)
+library(nlme)
+library(rstatix)
 
 setwd("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/")
 #load initial PAM datasheet 
@@ -131,8 +133,67 @@ tukey.plot.aov<-aov(fv_fm ~ temp * wound + genotype, data=full.data)
 tukey.plot.test<-TukeyHSD(tukey.plot.aov)
 plot(tukey.plot.test, las = 1)
 
+ggplot(full.data%>%filter(!timepoint == "0"), aes(x = timepoint, y = fv_fm, shape = wound, col = temp))+
+  geom_point(size = .5, position = position_dodge(width = 0.5))+
+  stat_summary(fun = mean, geom = "point", size = 5 , position = position_dodge(width = 0.5))+
+  stat_summary(
+    fun.data = "mean_cl_normal", 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.5)
+  )+
+  ylab('Photosynthetic Efficiency (Fv/Fm)') +
+  xlab('Days')
+
+ggplot(data = full.data, aes(x = timepoint, y = fv_fm, col = temp))+geom_jitter(size = .5, alpha = .5)+
+  stat_summary(
+    fun.data = mean_se, 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary( fun = "mean", geom = "point", position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "line", position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("Photosynthetic Efficiency (Fv/Fm)")+
+  xlab("Timepoint (Day)")+
+  scale_x_discrete(labels = c('0','10', '19'))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+ 
+  theme_classic()+
+  scale_color_discrete(labels = c("Ambient (~28)", "Elevated (~30)"))+
+  labs(color = "Temperature")
 
 
+# REPEATED MEASURES TWO WAY ANOVA 
+
+# summary statistics 
+full.data %>%
+  group_by(temp, wound, timepoint) %>%
+  get_summary_stats(fv_fm, type = "mean_sd")
+
+#check outliers - no extreme outliers
+full.data %>%
+  group_by(temp, wound, timepoint) %>%
+  identify_outliers(fv_fm)
+
+#check normality - 1 within group subject is not normal
+full.data %>%
+  group_by(temp, wound, timepoint) %>%
+  shapiro_test(fv_fm)
+
+ggqqplot(full.data, "fv_fm", ggtheme = theme_bw()) +
+  facet_grid(temp + wound ~ timepoint, labeller = "label_both")
+
+#change timepoint to numeric 
+
+# Two-way ANOVA with repeated measures using aov
+aov_result <- aov(fv_fm ~ temp * wound *as.numeric(timepoint) + Error(as.numeric(timepoint)/(coral_id)), data=full.data)
+summary(aov_result)
+
+
+
+# Two-way ANOVA with repeated measures using lme
+lme_result <- lme(fv_fm ~ temp * wound, random = ~1 | timepoint/temp/wound, data = full.data)
+summary(lme_result)
 
 
 

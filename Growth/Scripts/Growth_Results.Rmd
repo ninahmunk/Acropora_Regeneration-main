@@ -17,6 +17,7 @@ library("emmeans")
 library("lme4")
 library("Matrix")
 library("nlme")
+library("Rmisc")
 ```
 
 # Calculating Skeletal Mass from Buoyant Weight 
@@ -30,6 +31,75 @@ weight_final<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneratio
 
 rbind(weight_initial, weight_24hr, weight_day10, weight_final)%>%select(-date, -group, -temp_c, -salinity_ppt, -salt_temp_c ) -> weight.long
 ```
+
+# Percent change in Bouyant Weight
+```{r}
+weight.long%>%select(coral_id, bouyantweight_g, timepoint)%>%pivot_wider(names_from = timepoint, values_from = bouyantweight_g) -> weight.wide
+
+weight.wide%>%mutate(percent.change = ((final - postwound)/postwound)*100) -> bouyant.change
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
+bouyant.change <- bouyant.change[!(bouyant.change$coral_id %in% corals_to_remove), ]
+
+#bring in sample info\
+sample.info<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")
+
+bouyant.change%>%left_join(sample.info, by = "coral_id")-> bouyant.change
+
+bouyant.change%>%unite("treatment", wound:temp, remove = F) -> bouyant.change
+
+ggplot(data = bouyant.change, aes(x = treatment, y = percent.change))+geom_boxplot()
+
+# Perform ANOVA
+bw.model <- aov(percent.change ~ treatment, data = bouyant.change)
+summary(bw.model)
+TukeyHSD(bw.model)
+
+bw.model2 <- aov(percent.change ~ as.factor(wound)*as.factor(temp), data = bouyant.change)
+TukeyHSD(bw.model2)
+
+AIC(bw.model, bw.model2)
+
+mod<- lmer(percent.change ~ as.factor(wound)*as.factor(temp) + (1|genotype), data = bouyant.change)
+anova(mod)
+
+bouyant.change%>%aggregate(percent.change ~ treatment, FUN=mean)-> meanchange
+# Calculating standard error for error bars in the plot.
+bouyant.change%>%aggregate(percent.change ~ treatment, FUN = function(x) sd(x)/sqrt(length(x))) -> std_err 
+
+# Assuming all contrasts were significant for simplicity; this may change based on actual results.
+meanchange$letter <- c("a", "a", "a","a", "a", "a")
+
+# Plotting
+# Creating a bar plot with error bars and significant letters to clearly show the differences between groups.
+# Using specified fill colors for clarity.
+ggplot(meanchange, aes(x=treatment, y=percent.change, label=letter)) +
+  geom_bar(stat="identity", fill=c("gray", "skyblue", "darkblue","purple", "pink", "orange")) +
+  geom_errorbar(aes(ymin=percent.change-std_err$percent.change, ymax=percent.change+std_err$percent.change), width=.2) +
+  geom_text(aes(label=letter), nudge_y=0.0005, color="red") +
+  labs(title="Percent Change Bouyant Weight", x="Treatment", y="Growth (g/cm^2/day)")+ 
+  scale_x_discrete(labels = c('No Wound, Ambient','No Wound, Hot','Fragmentation, Ambient', 'Fragmentation, Hot', 'Abrasion, Ambient', 'Abrasion, Hot'))+
+  theme_classic()
+
+
+```
+```{r}
+#FILTERING BY WORM DAMAGE
+
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")-> worm
+
+bouyant.change%>%left_join(worm, by = "coral_id") -> bouyant.change.worm
+
+ggplot(data = bouyant.change.worm, aes(x = percent_affected, y = percent.change))+geom_point()
+
+bouyant.change.lowworm = subset(bouyant.change.worm, percent_affected == 0)
+
+mod2<- lmer(percent.change ~ wound.x*temp + (1|genotype.x), data = bouyant.change.lowworm)
+anova(mod2)
+
+ggplot(data = bouyant.change.lowworm, aes(x = percent_affected, y = percent.change))+geom_point()
+```
+
 
 
 ```{r}
@@ -413,6 +483,9 @@ ggplot(meangrowthrate, aes(x=treatment, y=growthrate, label=letter)) +
 
 
 ```{r}
+mod2<- lmer(growthrate ~ wound*temp + (1|genotype), data = growthrate)
+anova(mod2)
+
 model<- aov(full.growth ~ wound + as.factor(temp), data = growth.not.normal)
 summary(model)
 
@@ -431,6 +504,33 @@ pairwise_results <- pairs(emmeans_results)
 print(pairwise_results)
 
 ```
+```{r}
+# FILTERING BY WORM DAMAGE 
+#read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")-> worm
+
+growthrate%>%left_join(worm, by = "coral_id") -> growthrate.worm
+
+mod2<- lmer(growthrate ~ wound.x*temp+wound.x*percent_affected + (1|genotype.x), data = growthrate.worm)
+anova(mod2)
+
+ggplot(data = growthrate.worm, aes(x = percent_affected, y = growthrate))+geom_point()
+
+growthrate.lowworm = subset(growthrate.worm, genotype.x == 65 & percent_affected < 20 | genotype.x == 66 | genotype.x == 67 & percent_affected < 20)
+
+mod2<- lmer(growthrate ~ wound.x*temp*percent_affected + (1|genotype.x), data = growthrate.lowworm)
+anova(mod2)
+
+mod2<- lmer(growthrate ~ wound.x*temp + (1|genotype.x), data = growthrate.lowworm)
+anova(mod2)
+
+ggplot(data = worm, aes(x = percent_affected))+geom_histogram()+facet_wrap(~genotype)
+
+ggplot(data = worm, aes(x = genotype))
+
+
+
+```
+
 
 ## Growth rate standardized by post wound and final SA 
 ```{r}

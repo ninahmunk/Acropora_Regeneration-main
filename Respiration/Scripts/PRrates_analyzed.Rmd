@@ -15,7 +15,11 @@ library(lme4)
 library(Matrix)
 library(readxl)
 library(tidyr)
-#library(multcomp)
+library(lmerTest)
+library(nlme)
+library(car)
+library(ggpubr)
+library(rstatix)
 
 ```
 
@@ -110,6 +114,59 @@ Respiration$Rate.ln<-log(Respiration$umol.cm2.hr+0.1)
 
 read.csv("Output/Standardized_TimepointSA/Respiration/norm_resp_initial.csv") -> R1
 ```
+
+# Pearson correlation test
+```{r}
+# Pearson correlation test - Resp X SA
+correlation <- cor.test(initial.resp.raw$surf.area.cm2, initial.resp.raw$umol.sec.corr)
+
+# Print the correlation coefficient and p-value
+cat("Pearson correlation coefficient:", correlation$estimate, "\n")
+cat("p-value:", correlation$p.value, "\n")
+
+
+# Scatterplot
+ggplot(data = initial.resp.raw, aes(x = surf.area.cm2, y = umol.sec.corr)) +
+  geom_point() +
+  labs(x = "Geometric Surface Area (cm^2)", y = "Respiration (umol.sec)") +
+  geom_smooth(method = "lm") +
+  ggtitle("Correlation between Surface Area and Respiration")
+
+# Pearson correlation test - SA x Dry Mass
+correlation <- cor.test(initial.resp.raw$surf.area.cm2, initial.resp.raw$drymass)
+
+# Print the correlation coefficient and p-value
+cat("Pearson correlation coefficient:", correlation$estimate, "\n")
+cat("p-value:", correlation$p.value, "\n")
+
+
+# Scatterplot
+ggplot(data = initial.resp.raw, aes(x = surf.area.cm2, y = drymass)) +
+  geom_point() +
+  labs(x = "Geometric Surface Area (cm^2)", y = "drymass (g)") +
+  geom_smooth(method = "lm") +
+  ggtitle("Correlation between Surface Area and Drymass")
+
+
+# Pearson correlation test - Resp x Dry Mass
+correlation <- cor.test(initial.resp.raw$umol.sec.corr, initial.resp.raw$drymass)
+
+# Print the correlation coefficient and p-value
+cat("Pearson correlation coefficient:", correlation$estimate, "\n")
+cat("p-value:", correlation$p.value, "\n")
+
+
+# Scatterplot
+ggplot(data = initial.resp.raw, aes(x = drymass, y = umol.sec.corr)) +
+  geom_point() +
+  labs(x = "Geometric Surface Area (cm^2)", y = "Respiration (umol.sec)") +
+  geom_smooth(method = "lm") +
+  ggtitle("Correlation between Respiration and Drymass")
+
+
+```
+
+
 
 # Load in initial photosynthesis rates, join with initial sample info, assign blank rates to each coral ID. Blank rates are from the seawater only chamber run along with each set of corals, this O2 rate is subtracted from all coral O2 rates to account for 'background noise'.
 ```{r}
@@ -605,6 +662,9 @@ corals_to_remove <- c(11, 5, 37, 104, 71, 17)
 # Remove rows based on the condition
 all.raw.resp.clean <- all.raw.resp[!(all.raw.resp$coral_num %in% corals_to_remove), ]
 
+all.raw.resp.clean%>%mutate(umol.sec.corr = abs(umol.sec.corr),
+                            umol.hr = umol.sec.corr*3600,
+                            rate = "Respiration")-> all.raw.resp.clean
 #write.csv(all.raw.resp.clean, "/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Respiration/full.raw.resp.clean.csv")
 
 ggplot(data = all.raw.resp.clean, aes(x = SA, y = umol.sec.corr, col = temp))+
@@ -624,6 +684,9 @@ corals_to_remove <- c(11, 5, 37, 104, 71, 17)
 # Remove rows based on the condition
 all.raw.photo.clean <- all.raw.photo[!(all.raw.photo$coral_num %in% corals_to_remove), ]
 
+all.raw.photo.clean%>%mutate(umol.hr = umol.sec.corr*3600, 
+                             rate = "Net_Photosynthesis")-> all.raw.photo.clean
+
 ggplot(data = all.raw.photo.clean, aes(x = SA, y = umol.sec.corr, col = temp))+
   geom_point()+
   geom_smooth(method='lm')+
@@ -632,6 +695,176 @@ ggplot(data = all.raw.photo.clean, aes(x = SA, y = umol.sec.corr, col = temp))+
 
 #write.csv(all.raw.photo.clean, "/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Photosynthesis/full.raw.photo.clean.csv")
 ```
+# Pearson correlation test - GEOMETRIC SURFACE AREA X RESPIRATION RATES (STANDARDIZED TO UMOL.SEC)
+```{r}
+
+# GEOMETRIC SURFACE AREA X RESPIRATION RATES (STANDARDIZED TO UMOL.HR)
+correlation <- cor.test(all.raw.resp.clean$SA, all.raw.resp.clean$umol.hr)
+
+# Print the correlation coefficient and p-value
+cat("Pearson correlation coefficient:", correlation$estimate, "\n")
+cat("p-value:", correlation$p.value, "\n")
+
+# Scatterplot
+ggplot(data = all.raw.resp.clean, aes(x = SA, y = umol.hr)) +
+  geom_point() +
+  labs(x = "Geometric Surface Area (cm^2)", y = "Respiration (umol/hr)") +
+  geom_smooth(method = "lm") +
+  ggtitle("Correlation between Surface Area and Respiration, r = 0.84;p = 3.44873e-110 ")+ 
+  theme_classic()
+
+# GEOMETRIC SURFACE AREA X NET PHOTOSYNTHESIS RATES (STANDARDIZED TO UMOL.HR)
+correlation <- cor.test(all.raw.photo.clean$SA, all.raw.photo.clean$umol.hr)
+
+# Print the correlation coefficient and p-value
+cat("Pearson correlation coefficient:", correlation$estimate, "\n")
+cat("p-value:", correlation$p.value, "\n")
+
+# Scatterplot
+ggplot(data = all.raw.photo.clean, aes(x = SA, y = umol.hr)) +
+  geom_point() +
+  labs(x = "Geometric Surface Area (cm^2)", y = "Photosynthesis (umol/hr)") +
+  geom_smooth(method = "lm") +
+  ggtitle("Correlation between Surface Area and Photosynthesis, r = 0.53;p = 4.617585e-31 ")+ 
+  theme_classic()
+
+
+
+rbind(all.raw.photo.clean, all.raw.resp.clean) -> rates.all.clean
+rates.all.clean%>%select(-umol.sec.corr)%>%pivot_wider(names_from = rate, values_from = umol.hr)%>%mutate(Gross_photosynthesis = Net_Photosynthesis + Respiration) -> rates.all.clean.wide
+rates.all.clean.wide%>%pivot_longer(cols = c(Net_Photosynthesis, Respiration, Gross_photosynthesis), names_to = "rate", values_to = "umol.hr")-> rates.all.clean.long
+
+# Scatterplot
+ggplot(data = rates.all.clean.long, aes(x = SA, y = umol.hr)) +
+  geom_point() +
+  labs(x = "Geometric Surface Area (cm^2)", y = "Rate (umol/hr)") +
+  geom_smooth(method = "lm") +
+  ggtitle("Correlation between Surface Area and Metabolic Rates")+ 
+  theme_classic()+ 
+  facet_wrap(~rate)
+
+
+# GEOMETRIC SURFACE AREA X GROSS PHOTOSYNTHESIS RATES (STANDARDIZED TO UMOL.HR)
+rates.all.clean.long%>%filter(rate == "Gross_photosynthesis")-> all.raw.gross.photo.clean
+
+correlation <- cor.test(all.raw.gross.photo.clean$SA, all.raw.gross.photo.clean$umol.hr)
+
+# Print the correlation coefficient and p-value
+cat("Pearson correlation coefficient:", correlation$estimate, "\n")
+cat("p-value:", correlation$p.value, "\n")
+
+# Scatterplot
+ggplot(data = all.raw.gross.photo.clean, aes(x = SA, y = umol.hr)) +
+  geom_point() +
+  labs(x = "Geometric Surface Area (cm^2)", y = "Gross Photosynthesis (umol/hr)") +
+  geom_smooth(method = "lm") +
+  ggtitle("Correlation between Surface Area and Gross Photosynthesis, r = 0.82;p = 8.140724e-99")+ 
+  theme_classic()
+
+# Replace rate names in data frame
+rates.all.clean.long$rate <- gsub("Gross_photosynthesis", "Gross Photosynthesis", rates.all.clean.long$rate)
+rates.all.clean.long$rate <- gsub("Net_Photosynthesis", "Net Photosynthesis", rates.all.clean.long$rate)
+
+# Calculate Pearson's correlation coefficient and p-value for each rate
+correlation_stats <- rates.all.clean.long %>%
+  group_by(rate) %>%
+  summarise(
+    correlation_coef = cor.test(SA, umol.hr)$estimate,
+    p_value = cor.test(SA, umol.hr)$p.value
+  )
+
+ggplot(data = rates.all.clean.long, aes(x = SA, y = umol.hr)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Geometric Surface Area (cm^2)", y = "Rate (umol/hr)") +
+  ggtitle("Correlation between Surface Area and Metabolic Rates")+ 
+  theme_classic()+ 
+  facet_wrap(~rate, scales = "free")
+
+
+# Merge correlation statistics with the original data
+rates.all.clean.long <- merge(rates.all.clean.long, correlation_stats, by = "rate")
+
+# Summarize statistics for each facet
+summary_stats <- rates.all.clean.long %>%
+  group_by(rate) %>%
+  summarize(correlation_coef = first(correlation_coef),
+            p_value = first(p_value))
+
+
+# Scatterplot with facet_wrap and text annotations for statistics
+ggplot(data = rates.all.clean.long, aes(x = SA, y = umol.hr)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Geometric Surface Area (cm^2)", y = "Rate (umol/hr)") +
+  ggtitle("Correlation between Surface Area and Metabolic Rates") + 
+  theme_classic() + 
+  facet_wrap(~factor(rate, levels = c("Respiration", "Gross Photosynthesis", "Net Photosynthesis"))) +
+  geom_text(data = summary_stats,
+            aes(x = Inf, y = -Inf,
+                label = paste("r =", round(correlation_coef, 2), " ", "p =", format(p_value, scientific = TRUE))),
+            hjust = 1.4,
+            vjust = -39,
+            size = 3,  # Adjust the size of the text
+            family = "sans")  # Change the font family if needed
+
+```
+
+# Correlation between Wax Surface Area and Geometric Surface Areas
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/final_surface_areas.csv")%>%select(coral_id, wax_weight_g, CSA_cm2)%>%rename(SA_wax = CSA_cm2) -> wax
+
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/initial_surface_areas.csv")%>%rename(SA_geo=SA)-> geo
+
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv")-> geo.post.wound
+
+wax%>%left_join(geo, by = "coral_id")%>%left_join(geo.post.wound, by = "coral_id") -> all.SA
+
+corals_to_remove <- c(11, 5, 37, 104, 71, 17)
+# Remove rows based on the condition
+all.SA.clean <- all.SA[!(all.SA$coral_id %in% corals_to_remove), ]
+
+all.SA.clean%>%pivot_longer(cols = c(SA_geo, SA_post_wound), names_to = "SA_method", values_to = "cm2")-> all.SA.clean.long
+
+all.SA.clean.long$SA_method <- gsub("SA_geo", "Pre-Injury", all.SA.clean.long$SA_method)
+all.SA.clean.long$SA_method <- gsub("SA_post_wound", "Post-Injury", all.SA.clean.long$SA_method)
+
+# Calculate Pearson's correlation coefficient and p-value for each rate
+correlation_stats <- all.SA.clean.long %>%
+  group_by(SA_method) %>%
+  summarise(
+    correlation_coef = cor.test(cm2, SA_wax)$estimate,
+    p_value = cor.test(cm2, SA_wax)$p.value
+  )
+
+# Merge correlation statistics with the original data
+all.SA.clean.long <- merge(all.SA.clean.long, correlation_stats, by = "SA_method")
+
+# Summarize statistics for each facet
+summary_stats <- all.SA.clean.long %>%
+  group_by(SA_method) %>%
+  summarize(correlation_coef = first(correlation_coef),
+            p_value = first(p_value))
+
+# Scatterplot with facet_wrap and text annotations for statistics
+ggplot(data = all.SA.clean.long, aes(x = SA_wax, y = cm2)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(x = "Wax-Derived Final Surface Area (cm^2)", y = "Geometric Surface Area (cm^2)") +
+  ggtitle("Correlation between Wax Surface Area and Geometric Surface Areas") + 
+  theme_classic() + 
+  facet_wrap(~factor(SA_method, levels = c("Pre-Injury", "Post-Injury"))) +
+  geom_text(data = summary_stats,
+            aes(x = Inf, y = -Inf,
+                label = paste("r =", round(correlation_coef, 2), " ", "p =", format(p_value, scientific = TRUE))),
+            hjust = 1.4,
+            vjust = -39,
+            size = 3,  # Adjust the size of the text
+            family = "sans")  # Change the font family if needed
+
+
+```
+
 
 # Read in complete respiration data from each timepoint, all of these rates are standardized by geometric surface area measurements
 ```{r}
@@ -648,7 +881,7 @@ corals_to_remove <- c(11, 5, 37, 104, 71, 17)
 All.Respiration.Clean <- All.Respiration[!(All.Respiration$coral_num %in% corals_to_remove), ]
 #write.csv(All.Respiration.Clean, "Output/Respiration/full.resp.data.clean.postwoundnorm.csv")
 ```
-# plot respiration rates (standardized)
+# FIGURES RESPIRATION (standardized)
 ```{r}
 data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Respiration/full.resp.data.clean.postwoundnorm.csv")%>%select(-X)%>%rename (coral_id = coral_num)
 genotype$coral_id<- as.character(genotype$coral_id)
@@ -696,9 +929,9 @@ ggplot(data = data, aes(x = timepoint, y = umol.cm2.hr, col = wound))+ geom_poin
 
 
 ```
+
+
 ```{r}
-helpme<- lmer(umol.cm2.hr ~ timepoint + temp + wound + (1|coral_id), data ) 
-summary(helpme)
 
 ggplot(data = data, aes(x = timepoint, y = umol.cm2.hr, col = wound))+geom_jitter(size = .5, alpha = .5)+
   stat_summary(
@@ -716,10 +949,88 @@ ggplot(data = data, aes(x = timepoint, y = umol.cm2.hr, col = wound))+geom_jitte
   theme_classic()+
   scale_color_discrete(labels = c("No Wound", "Fragmentation", "Abrasion"))+
   labs(color = "Wound Type")
+
+ggplot(data = data, aes(x = timepoint, y = umol.cm2.hr, col = temp))+geom_jitter(size = .5, alpha = .5)+
+  stat_summary(
+    fun.data = mean_se, 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("Respiration Rate (umol/cm2/hr)")+
+  xlab("Timepoint (Day)")+
+  scale_x_discrete(labels = c('0','1','10', '19'))+
+  facet_wrap(~wound, labeller = labeller(wound = c('0' = "No Injury", '1' = "Fragmentation", '2' = "Abrasion")))+ 
+  theme_classic()+
+  scale_color_discrete(labels = c("Ambient (~28)", "Elevated (~30)"))+
+  labs(color = "Temperature")
+```
+# REPEATED MEASURES TWO WAY ANOVA - RESPIRATION 
+```{r}
+
+# summary statistics 
+data %>%
+  group_by(temp, wound, timepoint) %>%
+  get_summary_stats(umol.cm2.hr, type = "mean_sd")
+
+#check outliers - day 10 coral 81 & 46, day 19 coral 93 are extreme outliers
+data %>%
+  group_by(temp, wound, timepoint) %>%
+  identify_outliers(umol.cm2.hr)
+
+#check normality - 3 within group subjects are not normal
+data %>%
+  group_by(temp, wound, timepoint) %>%
+  shapiro_test(umol.cm2.hr)
+
+ggqqplot(data, "umol.cm2.hr", ggtheme = theme_bw()) +
+  facet_grid(temp + wound ~ timepoint, labeller = "label_both")
+
+# Two-way ANOVA with repeated measures using aov
+aov_result <- aov(umol.cm2.hr ~ temp * wound + Error(timepoint/(temp*wound)), data=data)
+summary(aov_result)
+# Two-way ANOVA with repeated measures using lme
+lme_result <- lme(umol.cm2.hr ~ temp * wound, random = ~1 | timepoint/temp/wound, data = data)
+summary(lme_result)
+
+
+# clean up data by removing outliers and try tests again
+data %>% filter(!coral_id == '81') %>% filter(!coral_id == '46') %>% filter(!coral_id == '93') -> data.nooutliers
+
+#outliers - no more extreme outliers
+data.nooutliers %>%
+  group_by(temp, wound, timepoint) %>%
+  identify_outliers(umol.cm2.hr)
+
+#check normality - 1 group not normal
+data.nooutliers %>%
+  group_by(temp, wound, timepoint) %>%
+  shapiro_test(umol.cm2.hr)
+
+aov_result <- aov(umol.cm2.hr ~ temp * wound + Error(timepoint/(temp*wound)), data=data.nooutliers)
+summary(aov_result) 
+
+# Two-way ANOVA with repeated measures using lme
+lme_result <- lme(umol.cm2.hr ~ temp * wound, random = ~1 | timepoint/temp/wound, data = data.nooutliers)
+summary(lme_result) 
+
+# after 
+
+```
+# LINEAR MIXED EFFECTS - RESPIRATION
+```{r}
+helpme<- lmer(umol.cm2.hr ~ timepoint + temp + wound + (1|coral_id), data ) #genotype as random effect instead of coral_id 
+summary(helpme)
+helpme2<- lmer(umol.cm2.hr ~ temp + wound + (1|coral_id) + (1|timepoint), data )
+summary(helpme2)
+
+AIC(helpme, helpme2) # second model has lower AIC
 ```
 
 
-# models
+# other models
 ```{r}
 summary(glm(umol.cm2.hr ~ temp + wound + timepoint, data = data))
 data%>%filter(!timepoint == ("day0")) -> data.filtered
@@ -938,7 +1249,7 @@ All.Photosynthesis.Clean <- All.Photosynthesis[!(All.Photosynthesis$coral_num %i
 #write.csv(All.Photosynthesis.Clean, "Photosynthesis/full.photo.data.clean.postwoundnorm.csv")
 ```
 
-# plot photosynthesis rates (standardized)
+# FIGURES NET PHOTOSYNTHESIS(standardized)
 ```{r}
 data3<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/Photosynthesis/full.photo.data.clean.postwoundnorm.csv")%>%select(-X)%>%rename(coral_id = coral_num)
 genotype$coral_id<- as.character(genotype$coral_id)
@@ -1001,13 +1312,6 @@ ggplot(data = data3, aes(x = timepoint, y = umol.cm2.hr, col = wound))+ geom_poi
 ```
 
 ```{r}
-chimmy<- lmer(umol.cm2.hr ~ timepoint + temp + wound + (1|coral_id), data3)
-summary(chimmy)
-chimmy2<- lmer(umol.cm2.hr ~ timepoint + treatment + (1|coral_id), data3)
-summary(chimmy2)
-
-# Step 3: Plot data with significant letters
-# Calculating mean growth for each group to plot.
 data3%>%unite("treatment", wound:temp, remove = F) -> data3
 data3%>%aggregate(umol.cm2.hr ~ treatment, FUN = function(x) sd(x)/sqrt(length(x))) -> std_err 
 
@@ -1020,7 +1324,7 @@ ggplot(data = data3, aes(x = timepoint, y = umol.cm2.hr, col = wound))+geom_jitt
   ) +
   stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
   stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = wound))+
-  ylab("Photosynthesis Rate (umol/cm2/hr)")+
+  ylab("Net Photosynthesis Rate (umol/cm2/hr)")+
   xlab("Timepoint (Day)")+
   scale_x_discrete(labels = c('0','1','10', '19'))+
   facet_wrap(~temp, labeller = labeller(temp = c("A" = "Ambient", "H" = "Hot")))+ 
@@ -1028,17 +1332,193 @@ ggplot(data = data3, aes(x = timepoint, y = umol.cm2.hr, col = wound))+geom_jitt
   scale_color_discrete(labels = c("No Wound", "Fragmentation", "Abrasion"))+
   labs(color = "Wound Type")
 
-
+ggplot(data = data3, aes(x = timepoint, y = umol.cm2.hr, col = temp))+geom_jitter(size = .5, alpha = .5)+
+  stat_summary(
+    fun.data = mean_se, 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("Net Photosynthesis Rate (umol/cm2/hr)")+
+  xlab("Timepoint (Day)")+
+  scale_x_discrete(labels = c('0','1','10', '19'))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+ 
+  theme_classic()+
+  scale_color_discrete(labels = c("Ambient (~28)", "Elevated (~30)"))+
+  labs(color = "Temperature")
 
 ```
 
-
-#Combine R and P to plot together by timepoint 
+# REPEATED MEASURES TWO WAY ANOVA - NET PHOTOSYNTHESIS
 ```{r}
-All.Respiration.Clean$rate <- "Respiration"
-All.Photosynthesis.Clean$rate <- "Photosynthesis"
 
+# summary statistics 
+data3 %>%
+  group_by(temp, wound, timepoint) %>%
+  get_summary_stats(umol.cm2.hr, type = "mean_sd")
+
+#check outliers - no extreme outliers
+data3 %>%
+  group_by(temp, wound, timepoint) %>%
+  identify_outliers(umol.cm2.hr)
+
+#check normality - 1 within group subject is not normal
+data3 %>%
+  group_by(temp, wound, timepoint) %>%
+  shapiro_test(umol.cm2.hr)
+
+ggqqplot(data3, "umol.cm2.hr", ggtheme = theme_bw()) +
+  facet_grid(temp + wound ~ timepoint, labeller = "label_both")
+
+# Two-way ANOVA with repeated measures using aov
+aov_result <- aov(umol.cm2.hr ~ temp * wound + Error(timepoint/(temp*wound)), data=data3)
+summary(aov_result)
+# Two-way ANOVA with repeated measures using lme
+lme_result <- lme(umol.cm2.hr ~ temp * wound, random = ~1 | timepoint/temp/wound, data = data3)
+summary(lme_result)
 
 
 ```
+
+# LINEAR MIXED EFFECTS - NET PHOTOSYNTHESIS  
+```{r}
+chimmy<- lmer(umol.cm2.hr ~ timepoint + temp + wound + (1|coral_id), data3)
+summary(chimmy)
+chonga<- lmer(umol.cm2.hr ~ temp + wound + (1|coral_id) + (1|timepoint), data3)
+summary(chonga)
+
+
+chimmy2<- lmer(umol.cm2.hr ~ timepoint + treatment + (1|coral_id), data3)
+summary(chimmy2)
+```
+
+# FIGURES GROSS PHOTOSYNTHESIS(standardized)
+```{r}
+rates.all.clean.long%>%mutate(umol.cm2.hr = umol.hr / SA) -> rates.long.standardized
+rates.long.standardized%>%filter(rate == "Gross Photosynthesis") -> data2
+
+data2%>%unite("treatment", wound:temp, remove = F) -> data2
+data2%>%aggregate(umol.cm2.hr ~ treatment, FUN = function(x) sd(x)/sqrt(length(x))) -> std_err 
+```
+
+
+```{r}
+
+ggplot(data = data2, aes(x = timepoint, y = umol.cm2.hr, col = wound))+geom_jitter(size = .5, alpha = .5)+
+  stat_summary(
+    fun.data = mean_se, 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = wound))+
+  ylab("Gross Photosynthesis Rate (umol/cm2/hr)")+
+  xlab("Timepoint (Day)")+
+  scale_x_discrete(labels = c('0','1','10', '19'))+
+  facet_wrap(~temp, labeller = labeller(temp = c("A" = "Ambient", "H" = "Hot")))+ 
+  theme_classic()+
+  scale_color_discrete(labels = c("No Wound", "Fragmentation", "Abrasion"))+
+  labs(color = "Wound Type")
+
+ggplot(data = data2, aes(x = timepoint, y = umol.cm2.hr, col = temp))+geom_jitter(size = .5, alpha = .5)+
+  stat_summary(
+    fun.data = mean_se, 
+    geom = "errorbar", 
+    width = 0.2, 
+    position = position_dodge(width = 0.2)
+  ) +
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("Gross Photosynthesis Rate (umol/cm2/hr)")+
+  xlab("Timepoint (Day)")+
+  scale_x_discrete(labels = c('0','1','10', '19'))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+ 
+  theme_classic()+
+  scale_color_discrete(labels = c("Ambient (~28)", "Elevated (~30)"))+
+  labs(color = "Temperature")
+
+```
+
+# REPEATED MEASURES TWO WAY ANOVA - GROSS PHOTOSYNTHESIS
+```{r}
+
+# summary statistics 
+data2 %>%
+  group_by(temp, wound, timepoint) %>%
+  get_summary_stats(umol.cm2.hr, type = "mean_sd")
+
+#check outliers - coral 46 day 10, coral 89 day 0 
+data2 %>%
+  group_by(temp, wound, timepoint) %>%
+  identify_outliers(umol.cm2.hr)
+
+#check normality - 2 within group subjects are not normal
+data2 %>%
+  group_by(temp, wound, timepoint) %>%
+  shapiro_test(umol.cm2.hr)
+
+ggqqplot(data2, "umol.cm2.hr", ggtheme = theme_bw()) +
+  facet_grid(temp + wound ~ timepoint, labeller = "label_both")
+
+# Two-way ANOVA with repeated measures using aov
+aov_result <- aov(umol.cm2.hr ~ temp * wound + Error(timepoint/(temp*wound)), data=data2)
+summary(aov_result) # no significance 
+# Two-way ANOVA with repeated measures using lme
+lme_result <- lme(umol.cm2.hr ~ temp * wound, random = ~1 | timepoint/temp/wound, data = data2)
+summary(lme_result) # wound1 significantly different from control, significant interaction tempH:wound1
+
+# clean up data by removing outliers and try tests again
+data2 %>% filter(!coral_num == '46') %>% filter(!coral_num == '89') -> data2.nooutliers
+
+#outliers - no more extreme outliers
+data2.nooutliers %>%
+  group_by(temp, wound, timepoint) %>%
+  identify_outliers(umol.cm2.hr)
+
+#check normality - 1 group not normal
+data2.nooutliers %>%
+  group_by(temp, wound, timepoint) %>%
+  shapiro_test(umol.cm2.hr)
+
+ggqqplot(data2.nooutliers, "umol.cm2.hr", ggtheme = theme_bw()) +
+  facet_grid(temp + wound ~ timepoint, labeller = "label_both")
+
+aov_result <- aov(umol.cm2.hr ~ temp * wound + Error(timepoint/(temp*wound)), data=data2.nooutliers)
+summary(aov_result) # no significance 
+
+# Two-way ANOVA with repeated measures using lme
+lme_result <- lme(umol.cm2.hr ~ temp * wound, random = ~1 | timepoint/temp/wound, data = data2.nooutliers)
+summary(lme_result) # results do not change, wound1 significantly different from control, significant interaction tempH:wound1
+
+```
+
+
+# FIGURES: ALL METABOLIC RATES
+```{r}
+
+rates.long.standardized%>%mutate(temp = as.factor(temp),
+                                 timepoint = as.factor(timepoint))-> rates.long.standardized
+
+ggplot( data = rates.long.standardized, aes(x = timepoint, y = umol.cm2.hr, col = temp))+ geom_jitter(size = .5, alpha = .5)+ 
+  stat_summary(fun.data = mean_se, geom = 'errorbar', width = 0.2, position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("Rate (umol/cm2/hr)")+
+  xlab("Timepoint (day)")+
+  scale_x_discrete(labels = c('0','1','10','19'))+
+  facet_wrap(rate ~ wound, scales = "free_y", labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+ 
+  scale_color_discrete(labels = c("Ambient (~28)", "Elevated (~30)"))+
+  labs(color = "Temperature")+
+  theme_classic()+ theme( strip.background = element_blank() )
+  
+```
+
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")-> worm
+```
+
+
 

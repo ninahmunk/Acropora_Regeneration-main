@@ -1,0 +1,61 @@
+---
+title: "Analyzing Dark Respiration and Gross Photosynthesis from the Coral Traits Database"
+author: "Ninah Munk"
+date: "2024-05-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load Packages
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(janitor)
+```
+Load Data 
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Coral_Traits/Respiration.Photosynthesis/data_20240512.csv") -> data
+
+```
+
+
+Select columns of interest and make data wide format (one row for each observation ID)
+```{r}
+data%>%select(observation_id, specie_name, latitude, longitude, resource_id, trait_name, value) -> data.filtered
+
+data.filtered%>%pivot_wider(names_from = trait_name, values_from = value)%>%clean_names() -> data.wide
+```
+
+Bring R and P rates into one column and drop duplicates. 
+```{r}
+data.wide%>%pivot_longer(cols = c(gross_photosynthesis, dark_respiration), names_to = "rate", values_to = "umol.cm2.hr")%>%drop_na("umol.cm2.hr")-> data.long
+
+```
+
+Replace "~28" with 28
+```{r}
+data.long$water_temperature[data.long$water_temperature == "~28"] <- 28
+```
+
+
+```{r}
+ggplot(data = data.long%>%filter(rate == "dark_respiration")%>%drop_na(water_temperature), aes(x = water_temperature, y = umol.cm2.hr))+geom_point()+ggtitle("Dark Respiration X Temperature")
+ggplot(data = data.long%>%filter(rate == "gross_photosynthesis")%>%drop_na(water_temperature), aes(x = water_temperature, y = umol.cm2.hr))+geom_point()+ggtitle("Gross Photosynthesis X Temperature")
+```
+
+
+
+```{r}
+ggplot(data = data.long%>%filter(rate == "dark_respiration"), aes(x = water_temperature, y = umol.cm2.hr))+ geom_point(position = "jitter")+ facet_wrap(~specie_name)
+ggplot(data = data.long%>%filter(rate == "gross_photosynthesis"), aes(x = water_temperature, y = umol.cm2.hr))+ geom_point(position = "jitter")+ facet_wrap(~specie_name)
+```
+
+
+```{r}
+ggplot(data = data.long%>%filter(specie_name == "Acropora cervicornis"), aes(x = water_temperature, y = umol.cm2.hr))+ geom_point(position = "jitter")+ facet_wrap(~rate)
+```
+

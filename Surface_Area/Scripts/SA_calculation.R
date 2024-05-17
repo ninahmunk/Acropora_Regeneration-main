@@ -32,7 +32,7 @@ range(smpls$CSA_cm2)
 range(calibration$CSA_cm2) # 6.944456 - 83.406250
 
 #save the output
-write_csv(smpls, path = "/Users/ninahmunk/Documents/Projects/Regeneration_3/surface_area/output/final_surface_areas.csv")
+#write_csv(smpls, path = "/Users/ninahmunk/Documents/Projects/Regeneration_3/surface_area/output/final_surface_areas.csv")
 
 ################### INITIAL SA (GEOMETRIC) ##################################### ##### 
 #need to figure out how to add branches together (aka rows of CSA_cm2 together to get total coral SA)
@@ -57,7 +57,7 @@ range(summarized_initial_data$SA) #7.445882 - 38.165366
 ggplot(summarized_initial_data)+
   geom_point(aes(coral_id,SA))
 
-write_csv(summarized_data, path = "Output/initial_surface_areas.csv")
+#write_csv(summarized_data, path = "Output/initial_surface_areas.csv")
 
 #calculating mean tip diameter to use for removing SA of wound type 2 from initial surface areas
 wound_2_avg_tip_diameter<- mean(data$diameter_tip_mm)
@@ -87,7 +87,7 @@ SA_after_wounding<-initialSA_woundSA%>%mutate(SA_post_wound = SA - CSA_cm2)
 
 Post_Wound_Surface_Areas<- SA_after_wounding%>%select(coral_id, SA_post_wound)
 range(Post_Wound_Surface_Areas$SA_post_wound)
-write_csv(Post_Wound_Surface_Areas, path = "Surface_Area/Output/post_wound_surface_areas.csv")
+#write_csv(Post_Wound_Surface_Areas, path = "Surface_Area/Output/post_wound_surface_areas.csv")
 
 ################### WAX SA VS GEOMETRIC SA ###################################### #####
 # I want to know if I can translate geometric SA into wax derived SA  
@@ -135,6 +135,7 @@ range(treatment_corals$SA_geo)
 
 controls_long <- controls %>%
   gather(key = "measurement", value = "value", SA_wax, SA_geo)
+
 
 
 
