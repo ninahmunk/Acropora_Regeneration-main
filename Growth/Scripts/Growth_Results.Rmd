@@ -8,11 +8,11 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library("tidyverse")
+library("dplyr")
+library("ggplot2")
 library("readxl")
 library("janitor")
-library("ggplot2")
 library('readxl')
-library("dplyr")
 library("emmeans")
 library("lme4")
 library("Matrix")
@@ -133,7 +133,7 @@ data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Su
 # add surface areas of branches together 
   summarized_initial_data <- data %>%
   group_by(coral_id) %>%
-  summarize(SA = sum(CSA_cm2))
+  reframe(SA = sum(CSA_cm2))
   
 # calculate the mean apical tip diameter to use for removing SA of abrasion wound (type 2) from initial surface areas
 wound_2_avg_tip_diameter<- mean(data$diameter_tip_mm)
@@ -225,7 +225,7 @@ summary(stnd.curve2)$r.squared #decent rsquared
  
  SA's derived geometrically are positively correlated to wax dip derived SA
 ```{r}
-SA_postwound%>%select(coral_id, SA, SA_postwound)%>%rename(SA_initial = SA)%>%left_join(smpls%>%select(coral_id, SA)%>%rename(SA_final = SA))%>%left_join(sample.info)-> all.SA
+SA_postwound%>%select(coral_id, SA, SA_postwound)%>%dplyr::rename(SA_initial = SA)%>%left_join(smpls%>%select(coral_id, SA)%>%dplyr::rename(SA_final = SA))%>%left_join(sample.info)-> all.SA
 
 stnd.curve3 <- lm(SA_initial~SA_final, data=all.SA)
 plot(SA_initial~SA_final, data=all.SA)
@@ -249,7 +249,7 @@ smpls%>%left_join(SA_to_subtract, by = "coral_id")%>%mutate(postwound.SA = SA - 
 Combine Initial, Postwound, and Final Surface Areas into one dataframe
 ```{r}
 summarized_initial_data%>%mutate(timepoint = "initial") -> SA.1
-postwound.SA%>%rename(SA = postwound.SA)%>%mutate(timepoint = "postwound") -> SA.2
+postwound.SA%>%dplyr::rename(SA = postwound.SA)%>%mutate(timepoint = "postwound") -> SA.2
 smpls%>%select(coral_id, SA)%>%mutate(timepoint = "day10") -> SA.3
 smpls%>%select(coral_id, SA)%>%mutate(timepoint = "final") -> SA.4
 
@@ -268,14 +268,14 @@ SA.long.clean <- SA.long[!(SA.long$coral_id %in% corals_to_remove), ]
 ```{r}
 skeletal.mass.clean%>%select(coral_id, timepoint, dry_mass)%>%pivot_wider(names_from = timepoint,
               values_from = dry_mass)%>%
-  rename(initial_weight = initial,
+  dplyr::rename(initial_weight = initial,
          day1_weight = postwound,
          day10_weight = day10, 
          final_weight = final) -> skeletal.mass.clean.wide
 
 SA.long.clean%>%pivot_wider(names_from = timepoint,
               values_from = SA)%>%
-  rename(initial.SA = initial,
+  dplyr::rename(initial.SA = initial,
          day1.SA = postwound,
          day10.SA = day10, 
          final.SA = final) -> SA.clean.wide
@@ -507,28 +507,62 @@ print(pairwise_results)
 ```{r}
 # FILTERING BY WORM DAMAGE 
 #read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")-> worm
-
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
 growthrate%>%left_join(worm, by = "coral_id") -> growthrate.worm
-
-mod2<- lmer(growthrate ~ wound.x*temp+wound.x*percent_affected + (1|genotype.x), data = growthrate.worm)
+#full model
+mod2<- lmer(growthrate ~ wound.x*temp*percent_affected + (1|genotype.x), data = growthrate.worm)
 anova(mod2)
 
-ggplot(data = growthrate.worm, aes(x = percent_affected, y = growthrate))+geom_point()
+#reduced model
+mod2<- lmer(growthrate ~ wound.x*temp+wound.x*percent_affected + (1|genotype.x), data = growthrate.worm)
 
-growthrate.lowworm = subset(growthrate.worm, genotype.x == 65 & percent_affected < 20 | genotype.x == 66 | genotype.x == 67 & percent_affected < 20)
+anova(mod2)
 
+ggplot(data = growthrate.worm, aes(x = wound.x, y = growthrate, color = temp))+geom_boxplot()+facet_wrap(~as.factor(percent_affected))
+
+#growthrate.lowworm = subset(growthrate.worm, genotype.x == 65 & percent_affected < 20 | genotype.x == 66 | genotype.x == 67 & percent_affected < 20)
+
+growthrate.lowworm = subset(growthrate.worm, percent_affected <= 10)
+
+#full model, percent affected is no longer significant 
 mod2<- lmer(growthrate ~ wound.x*temp*percent_affected + (1|genotype.x), data = growthrate.lowworm)
 anova(mod2)
 
-mod2<- lmer(growthrate ~ wound.x*temp + (1|genotype.x), data = growthrate.lowworm)
+#reduced
+mod2<- lmer(growthrate ~ wound.x*temp + temp*percent_affected + (1|genotype.x), data = growthrate.lowworm)
 anova(mod2)
 
+ggplot(data = growthrate.lowworm, aes(x = wound.x, growthrate))+ geom_boxplot()+facet_wrap(~temp)
+ggplot(data = growthrate.lowworm, aes(x = temp, growthrate))+ geom_boxplot()+facet_wrap(~wound.x)
+
+emmeans_noworms <- emmeans(mod2, ~ wound.x + temp)
+# Display the EMMs
+print(emmeans_results)
+# Pairwise comparisons for the levels within each predictor
+pairwise_results <- pairs(emmeans_noworms)
+# Display the pairwise comparisons
+print(pairwise_results)
+
+ggplot(data = growthrate.lowworm, aes(x = wound.x, y = growthrate, color = temp))+geom_boxplot()+facet_wrap(~as.factor(percent_affected))
+ggplot(data = growthrate.lowworm, aes(x = wound.x, y = growthrate, color = temp))+geom_boxplot()
 ggplot(data = worm, aes(x = percent_affected))+geom_histogram()+facet_wrap(~genotype)
 
 ggplot(data = worm, aes(x = genotype))
 
+summarySE(data = growthrate.lowworm, measurevar = "growthrate", groupvars = c("wound.x", "temp", "genotype.x"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+
+test <- growthrate.lowworm %>% group_by(wound.x, temp, genotype.x) %>% reframe(samp.size=n()) 
+```
 
 
+# checking to see how many corals have regeneration data
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/all.wounds.csv") -> regen
+
+growthrate.lowworm%>%left_join(regen, by = "coral_id")%>%drop_na() -> growthregen
 ```
 
 

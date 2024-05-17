@@ -622,7 +622,7 @@ ggplot(data = data4, aes(x = time_point_initial, y = num_new_polyps))+geom_boxpl
 # MAIN PROJ: Fragment and Abrasion analysis
 ```{r}
 read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/all.wounds.csv")%>%left_join(samp.info2, "coral_id")-> data5
-
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/all.wounds.csv") -> data5
 read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv") -> SA
 
 data5%>%left_join(SA, "coral_id")-> data5
