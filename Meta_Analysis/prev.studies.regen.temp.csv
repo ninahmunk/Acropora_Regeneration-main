@@ -1,0 +1,10 @@
+﻿study,growth.outcome,regen.outcome,tradeoff.outcome,temp.injury.synergy,wount.type,study.type,,,growth.outcome,regen.outcome,tradeoff.outcome,high.temp.injury.synergy
+1,1,-1,-1,1,abrasion,in situ,,1,increased growth post injury at high temp,increased regeneration post injury at high temp,regeneration>growth at high temp post injury,"yes, injury and high temp interact to increase growth"
+2,-1,-1,0,-1,fragmentation,ex situ,,0,no effect of injury x high temp on growth,no effect of injury x high temp on regen,no tradeoff at high temp post injury,no synergistic effect
+4,0,1,0,0,abrasion,ex situ,,-1,decreased growth post injury at high temp,decreased regeneration post injury at high temp,regeneration<growth at high temp post injury,"yes, injury and high temp interact to decrease growth"
+5,NA,-1,NA,-1,fragmentation,ex situ,,NA,did not report ,did not report ,did not report ,did not report 
+6,0,-1,0,0,abrasion,ex situ,,,,,,
+7,1,1,NA,NA,abrasion,ex situ ,,,,,,
+8,-1,0,0,-1,abrasion,ex situ,,,,,,
+9,1,0,0,1,abrasion,ex situ,,,,,,
+12,NA,-1,NA,NA,abrasion,in situ,,,,,,

@@ -1,0 +1,263 @@
+---
+title: 'ACR regeneration: Coral growth rate after filtering for worm damage'
+author: "Ninah Munk"
+date: "2024-05-17"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
+library(tidyverse)
+library(janitor)
+library(emmeans)
+library(plyr)
+library(ggthemes)
+library(here)
+library(pbkrtest)
+library(sjPlot)
+library(knitr)
+library(kableExtra)
+```
+
+## GROWTH
+Read in growth rate data and worm information. Combine data frames.
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Output/growthrates.csv") -> growth
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")-> worm
+
+growth%>%left_join(worm%>%select(coral_id, affected, percent_affected), by = "coral_id") -> growthdata
+```
+
+Turn genotype, wound, and temperature into factors 
+```{r}
+growthdata%>%mutate(genotype = as.factor (genotype),
+                    wound = as.factor(wound),
+                    temp = as.factor(temp))-> growthdata
+```
+
+Exploratory analysis: is growthrate affected by percent damage by AEFW? --> yes, growth is reduced at higher percentages of worm damage
+```{r}
+ggplot(growthdata, aes(x = percent_affected, y = growthrate))+geom_point()+geom_smooth(method = "lm")+facet_grid(~temp)
+
+
+```
+
+# FULL GROWTH MODEL
+Here I am incorporating worm damage 'percent_affected' into my full model for growth and it turns out to be highly significant p = 0.0005575 (see figure above). The three-way interaction is highly non-significant so I removed it. The interaction of temperature and worm damage was also highly non-significant, so I remove that and keep only the interaction of my main effects (temp and wound) and the interaction of wound and percent affected. In the reduced model worm damage is still highly significant (p = 0.0001522) and the interactions are moderately non-significant (p> 0.5) so this is the final model. The interaction of wound and temp is nearly significant, p = 0.0567. 
+```{r}
+#it is necessary to set the contrasts option in R. Because the multi-way ANOVA model is over-parameterised, it is necessary to choose a contrasts setting that sums to zero, otherwise the ANOVA analysis will give incorrect results with respect to the expected hypothesis
+
+options(contrasts = c("contr.sum", "contr.poly"))
+#full model
+full<- lmer(growthrate ~ wound*temp*percent_affected + (1|genotype), data = growthdata, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(full, type = 3)
+
+#reduced model
+reduced<- lmer(growthrate ~ wound*temp + wound*percent_affected + (1|genotype), data = growthdata, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(reduced, type = 3)
+```
+
+# FILTERING DATA TO REMOVE WORM EFFECT
+Here I filter the data to use only the corals that had low worm damage. I systematically filtered the data by lowering the threshold for worm damage until it was not significant in the full model. This threshold is <= 10% worm damage. The remaining sample size is N = 71
+```{r}
+growthdata.filtered = subset(growthdata, percent_affected <= 10)
+```
+
+# FULL MODEL WITH FILTERED DATA 
+Here I am running the model again with filtered data. The three way interaction in the full model has a p-value of 0.37 which is moderately unsignificant. In this model the interaction of wound and temperature is significant, p = 0.03540. (do not interpret temp*)
+```{r}
+
+# visualizing effect of worm damage on growth post filtering of the data
+ggplot(growthdata.filtered, aes(x = percent_affected, y = growthrate))+geom_point()+geom_smooth(method = "lm")
+
+#full model, percent affected is no longer significant 
+full.filtered<- lmer(growthrate ~ wound*temp*percent_affected + (1|genotype), data = growthdata.filtered, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(full.filtered, type = 3)
+
+```
+
+Full model with percent affected removed. Here I am not removing the interaction term to produce a reduced model because it is close to being significant
+```{r}
+#full model
+full.filtered<- lmer(growthrate ~ wound*temp + (1|genotype), data = growthdata.filtered, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+beep<- anova(full.filtered, type = 3) 
+ranova(full.filtered) # table of random effects
+
+# Get model summary:
+summary(full.filtered) # Satterthwaite df and t-tests
+
+# Use the Kenward-Roger method
+summary(full.filtered, ddf="Kenward-Roger")
+
+# Extract coefficient table:
+coef(summary(full.filtered))# table of fixed effects
+# The lme4-summary table:
+summary(full.filtered, ddf="lme4") # same as summary(as(fm, "lmerMod"))
+
+tab_model(full.filtered)
+
+# kable(beep, digits = 3)
+# colnames(beep) <- c("SS", "Mean SS","df", "DenDF", "$F$", "$p$")
+# rownames(beep) <- c("Injury", "Temperature", "Injury x Temperature")
+# table1<- kable(beep, digits = 3, format = "pandoc", caption = "Linear mixed-effects model results for growth rate (mg cm-2 day-1) with Satterthwaite's approximation for degrees of freedom.")
+ print(table1)
+
+
+```
+
+
+# MAKE PAIRWISE COMPARISONS, i dont know if this is helpful at all 
+```{r}
+lsmeans(full.filtered, pairwise~wound*temp, adjust="tukey") # this is the same as the pairwise comparison below
+
+emmeans <- emmeans(full.filtered, ~ wound*temp)
+# Display the EMMs
+print(emmeans)
+# Pairwise comparisons for the levels within each predictor
+pairwise_results <- pairs(emmeans)
+# Display the pairwise comparisons
+print(pairwise_results)
+```
+
+
+# VISUALIZE GROWTH BASED ON RESULTS OF FULL MODEL WITH FILTERED DATA
+In the second figure there is a growth reduction at warmer temp for control corals. Similar pattern for abrased corals. Overall growth lowered for fragmented corals but in an opposite pattern with respect to temperature. 
+```{r}
+ggplot(data = growthdata.filtered, aes(x = wound, y= growthrate))+ geom_boxplot()+facet_wrap(~temp)
+ggplot(data = growthdata.filtered, aes(x = temp, growthrate))+ geom_boxplot()+facet_wrap(~wound)
+```
+
+```{r}
+
+# Calculating mean growth for each group to plot.
+growthdata.filtered%>%dplyr::group_by(wound, temp)%>%summarize(Mean = mean(growthrate, na.rm=TRUE))-> meangrowthrate
+# Calculating standard error for error bars in the plot.
+growthdata.filtered%>%aggregate(growthrate ~ treatment, FUN = function(x) sd(x)/sqrt(length(x))) -> std_err 
+std_err%>%separate(col = treatment, into = c("wound", "temp")) -> std_err
+
+# Assuming all contrasts were significant for simplicity; this may change based on actual results.
+#meangrowthrate$letter <- c("a", "a", "a","a", "a", "a")
+
+# Plotting
+# Creating a bar plot with error bars and significant letters to clearly show the differences between groups.
+# Using specified fill colors for clarity.
+ggplot(meangrowthrate, aes(x=temp, y=Mean, fill = temp)) +
+  geom_bar(stat="identity", fill=c("darkblue", "orange", "darkblue", "orange", "darkblue", "orange")) +
+  geom_errorbar(aes(ymin=Mean-std_err$growthrate, ymax=Mean+std_err$growthrate), width=.2) + 
+  geom_point(data= growthdata.filtered, aes(x = temp, y = growthrate, fill = temp))+
+  #geom_text(aes(label=letter), nudge_y=0.0005, color="red") +
+  labs(title="Mean Coral Growth", x="Temperature", y="Growth (g/cm^2/day)")+ 
+  #scale_x_discrete(labels = c('No Wound, Ambient','No Wound, Hot','Fragmentation, Ambient', 'Fragmentation, Hot', 'Abrasion, Ambient', 'Abrasion, Hot'))+
+  theme_classic()+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))
+
+meangrowthrate%>%left_join(std_err, by = c("wound", "temp"))-> growth.final
+
+ggplot(growth.final, aes(x=temp, y=Mean, fill = temp, col = temp)) +
+  geom_bar(stat="identity", width = .9)+
+  geom_point(data= growthdata.filtered, aes(x = temp, y = growthrate))+
+  geom_errorbar(aes(ymin=Mean-growthrate, ymax=Mean+growthrate), width=.2) +
+  scale_fill_manual(values = c("white", "white", "white", "white", "white", "white"))+
+  scale_color_manual(values = c("#D55E00", "#CC79A7", "#D55E00", "#CC79A7", "#D55E00", "#CC79A7"))+
+  #geom_text(aes(label=letter), nudge_y=0.0005, color="red") +
+  labs(title="", x="Temperature", y="Growth (g/cm^2/day)")+ 
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+  theme_classic()+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))
+```
+
+```{r}
+
+# Calculating mean growth for each group to plot.
+growthdata.filtered%>%group_by(wound, temp)%>%summarize(Mean = mean(growthrate, na.rm=TRUE),
+                                                        'N'=length(growthrate ))-> meangrowthrate
+
+growthdata.filtered%>%aggregate(growthrate ~ treatment, FUN = function(x) sd(x)/sqrt(length(x)))%>%separate(col = treatment, into = c("wound", "temp")) -> std_err
+
+
+#meangrowthrate$wound <- factor(meangrowthrate$wound, levels = c("No Injury", "Fragmentation", "Abrasion"))
+
+
+dodge<-position_dodge(width=0.6) # this offsets the points so they don't overlap
+
+figure_2<- ggplot(meangrowthrate, aes(x = temp, y = Mean, colour = temp, fill = temp))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+  geom_bar(stat="identity", position="dodge") +geom_errorbar(aes(ymin=Mean-std_err$growthrate, ymax=Mean+std_err$growthrate), width=0, position=position_dodge(width = 0.9))+
+  geom_point(data = growthdata.filtered, aes(x = temp, y = growthrate, colour = temp), shape = 21, alpha = 0.7,
+             position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('black', 'black', 'black'), guide="none")+
+  scale_fill_manual(values = c('white', 'grey'), labels=c("Ambient", "Elevated"), guide = "none")+
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Temperature"))+
+  ylab(expression(paste("Growth Rate (mg/cm2/day)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 12)
+
+print(figure_2)
+
+#save plot
+
+# ggsave("figure_2.png", plot = figure_2, path = here(),
+#        width = 8,
+#        height = 8,
+#        units = "in")
+```
+
+
+# summary statistics with filtered growth data
+```{r}
+# range of growth rates across individual corals
+summary(growthdata.filtered)
+
+summarySE(data = growthdata.filtered, measurevar = "growthrate",
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+
+# rates of growth rates across treatments
+summarySE(data = growthdata.filtered, measurevar = "growthrate", groupvars = c("wound", "temp"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+```
+
+
+
+Run models within each wound treatment. Within each temperature treatment.
+There is a significant difference of growth rate between ambient and elevated control corals, where growth is reduced for unwounded corals at warmer temperature. 
+```{r}
+anova(control<- lmer(growthrate ~ temp + (1|genotype), data = growthdata.filtered%>%filter(wound == "0"))) #N = 25
+anova(fragment<- lmer(growthrate ~ temp + (1|genotype), data = growthdata.filtered%>%filter(wound == "1"))) # N = 23
+anova(abrasion<- lmer(growthrate ~ temp + (1|genotype), data = growthdata.filtered%>%filter(wound == "2"))) # N = 23
+
+
+anova(fragment<- lmer(growthrate ~ wound + (1|genotype), data = growthdata.filtered%>%filter(temp == "A"))) # N = 35
+anova(abrasion<- lmer(growthrate ~ wound + (1|genotype), data = growthdata.filtered%>%filter(temp == "H")))# N = 36
+```
+
+# BREAK DOWN OF SAMPLE SIZE WITHIN TREATMENTS 
+First I make a histogram to look at how genotype (i.e., parental colony) is represented by  worm damage. The most heavily affected corals were from parental colonies: 68, 69, and 70. Genotype was originally represented by an n of 3 within each treatment (genotypeXwoundXtemp, n = 3), but now there are several cases n = 1. Next I check the sample sizes of the woundxtemperature treatments disregarding genotype. These sample sizes range between n = 11-13.
+```{r}
+
+ggplot(data = worm, aes(x = percent_affected))+geom_histogram()+facet_wrap(~genotype)
+
+summarySE(data = growthdata.filtered, measurevar = "growthrate", groupvars = c("wound", "temp", "genotype"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+
+print(growthdata.filtered %>% group_by(wound, temp) %>% reframe(samp.size=n()))
+```
+
+
+# HOW MANY OF THE REMAINING CORALS DO I ALSO HAVE REGENERATION DATA FOR? 
+Out of the 71 corals I have growth data on, I have regeneration data for 14 of those. Within each timepoint/wound/temp treatment there is a sample size of 3-4. I will have to check how worm damage acts as a covariate in the regeneration data. 
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/all.wounds.csv") -> regen
+
+growthdata.filtered%>%left_join(regen, by = "coral_id")%>%drop_na() -> growthregen
+
+print(growthregen %>% group_by(coral_id) %>% reframe(samp.size=n()))
+print(growthregen %>% group_by(time_point, wound, temp) %>% reframe(samp.size=n()))
+
+```
+

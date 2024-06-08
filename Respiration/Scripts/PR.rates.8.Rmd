@@ -1,0 +1,97 @@
+---
+title: "Rates Analysis"
+author: "Ninah Munk"
+date: "2024-06-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(tidyverse)
+library(janitor)
+library(emmeans)
+library(lme4)
+library(Matrix)
+library(readxl)
+library(lmerTest)
+library(nlme)
+library(car)
+library(ggpubr)
+library(rstatix)
+library(Rmisc)
+library(ggthemes)
+library(effectsize)
+library(here)
+```
+
+# Load and Clean Data
+```{r}
+
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/full.data.cleaned.csv")-> data
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")-> worm
+```
+
+Clean up some data and combine data frames
+```{r}
+data <- rename(data, replace = c("coral_num" = "coral_id"))
+data%>%select(-X) -> data
+
+worm%>%select(coral_id, affected, percent_affected)-> worm.damage
+
+data%>%left_join(worm.damage, by = "coral_id")-> data2
+
+```
+
+Change timepoint to a continuous variable and numeric 
+```{r}
+
+data2%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
+                                     timepoint == "day1" ~ "1",
+                                     timepoint == "day10" ~ "10",
+                                     timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.numeric(timepoint),
+                                                                            temp = as.factor(temp),
+                                                                            wound = as.factor(wound),
+                                                                            genotype = as.factor(genotype)) -> data2
+
+```
+
+
+# plotting rates against worm damage. All rates are reduced with increasing worm damage.
+```{r}
+ggplot(data2%>%filter(timepoint == "0"), aes(x = percent_affected, y = umol.cm2.hr))+geom_point()+geom_smooth(method = "lm")+facet_grid(~rate)
+
+```
+
+# RESPIRATION 
+Run Models: The full model includes fixed effects wound, temp, and timepoint. Percent_affected is included as a covariate. 
+```{r}
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = data2%>%filter(rate == "Respiration"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod)
+
+```
+
+Filter data to remove worm effect determined from growth data. this threshold is below 10 percent worm damage. check that percent affected is no longer significant in full model
+```{r}
+rates.filtered = subset(data2, percent_affected <= 10)
+
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod) #percent affected is not longer significant 
+
+mod<- lmer(umol.cm2.hr ~ wound + temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"))
+anova(mod)# percent affected not significant in reduced model
+```
+
+
+Run models with filtered data without percent affected as a covariate. There is a significant interaction between temperature and timepoint in all three models. This becomes more significant after filtering out initial timepoint, so this tells me this interaction is driven primarily by the following timepoints. 
+```{r}
+
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp + (1| timepoint) + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+```

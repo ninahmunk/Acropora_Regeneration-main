@@ -17,8 +17,10 @@ read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/
 corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
 growth <- growth[!(growth$coral_id %in% corals_to_remove), ]
 read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/Data/growthrate.day10.csv")%>%select(-X)-> growth.day10
-read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/Data/survival.csv")%>%select(-X, -wound, -temp) -> regeneration
-read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/Data/percent.healed.csv")%>%select(-X) -> percent.healed
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/Data/survival.csv")%>%select(-X, -wound, -temp) -> regeneration #from survival analysis
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Tradeoff/Data/percent.healed.csv")%>%select(-X) -> percent.healed # from signs of healing analysis
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")%>%select(coral_id, affected, percent_affected)-> worm
+
 
 ```
 
@@ -34,6 +36,15 @@ model <- lm(growthrate ~ healed, data = data)
 
 # Summarize the model
 summary(model)
+
+```
+# trade off with removal of worm effect
+```{r}
+data%>%left_join(worm, by = "coral_id") -> data.worm
+
+data.worm.filtered = subset(data.worm, percent_affected <= 10)
+
+ggplot(data = data.worm.filtered, aes(x = as.numeric(time_point), y = growthrate))+geom_point()+geom_smooth(method = "lm", se = FALSE)+ labs(title = "Growth X Healed Status by end of Experiment", x ="Time to full regeneration", y = "Growth (cm2/day)")+theme_classic()
 
 ```
 

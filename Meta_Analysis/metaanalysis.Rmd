@@ -1,0 +1,43 @@
+---
+title: "Meta Analysis of previous experimental Temp X Regen studies"
+author: "Ninah Munk"
+date: "2024-05-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
+library(tidyverse)
+library(janitor)
+library(emmeans)
+#%>%unite("ID", ID:treatment.level, remove = TRUE)
+```
+
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Meta_Analysis/regen.meta.csv")%>%select(-notes) -> data
+```
+
+# filtering out data 4 bc its a nightmare to wrangle 
+```{r}
+data%>%filter(!ID == "4")%>%select(-treatment.level)-> data1
+
+data1%>%pivot_wider(names_from = measurement, values_from = c(value, unit))-> data1.wide
+```
+
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+

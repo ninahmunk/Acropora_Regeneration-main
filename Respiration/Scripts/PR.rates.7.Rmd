@@ -1,0 +1,580 @@
+---
+title: "Metabolic rate analysis"
+author: "Ninah Munk"
+date: "2024-05-17"
+output: html_document
+---
+# Load packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(janitor)
+library(emmeans)
+library(lme4)
+library(Matrix)
+library(readxl)
+library(lmerTest)
+library(nlme)
+library(car)
+library(ggpubr)
+library(rstatix)
+library(Rmisc)
+library(ggthemes)
+library(effectsize)
+library(here)
+
+```
+
+
+# Load and Clean Data
+```{r}
+
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/full.data.cleaned.csv")-> data
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")-> worm
+```
+
+Clean up some data and combine data frames
+```{r}
+data <- rename(data, replace = c("coral_num" = "coral_id"))
+data%>%select(-X) -> data
+
+worm%>%select(coral_id, affected, percent_affected)-> worm.damage
+
+data%>%left_join(worm.damage, by = "coral_id")-> data2
+
+```
+
+Change timepoint to a continuous variable and numeric 
+```{r}
+
+data2%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
+                                     timepoint == "day1" ~ "1",
+                                     timepoint == "day10" ~ "10",
+                                     timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.numeric(timepoint),
+                                                                            temp = as.factor(temp),
+                                                                            wound = as.factor(wound),
+                                                                            genotype = as.factor(genotype)) -> data2
+
+```
+
+
+```{r}
+ggplot(data2%>%filter(timepoint == "0"), aes(x = percent_affected, y = umol.cm2.hr))+geom_point()+geom_smooth(method = "lm")+facet_grid(~rate)
+
+```
+
+
+# RESPIRATION 
+Run Models: The full model includes fixed effects wound, temp, and timepoint. Percent_affected is included as a covariate. 
+```{r}
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = data2%>%filter(rate == "Respiration"))
+anova(mod)
+
+#reduced model
+mod2<- lmer(umol.cm2.hr ~ wound*temp*timepoint + temp*timepoint*percent_affected + (1|genotype/coral_id), data = data2%>%filter(rate == "Respiration"))
+anova(mod2)
+
+```
+
+Filter data to remove worm effect determined from growth data. this threshold is below 10 percent worm damage. check that percent affected is no longer significant in full model
+```{r}
+rates.filtered = subset(data2, percent_affected <= 10)
+
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"))
+anova(mod) #percent affected is not longer significant 
+
+mod<- lmer(umol.cm2.hr ~ wound + temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"))
+anova(mod)# percent affected not significant in reduced model
+```
+
+
+Run models with filtered data without percent affected as a covariate. There is a significant interaction between temperature and timepoint in all three models. This becomes more significant after filtering out initial timepoint, so this tells me this interaction is driven primarily by the following timepoints. 
+```{r}
+
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"))
+anova(mod)
+summary(mod)
+options(es.use_symbols = TRUE)
+parameters::model_parameters(anova(mod))
+eta_squared(mod)
+
+```
+
+Percent change in respiration from pre-treatment day 0 to post treatment day 1 
+```{r}
+resp.change <- rates.filtered%>%select(-drymass,-SA,-umol.hr)%>%pivot_wider(names_from = timepoint, values_from = umol.cm2.hr) %>% mutate(change1 = ((`1` - `0`)/`0`)*100,
+                                                                                                                                          change2 = ((`10` - `0`)/`0`)*100,
+                                                                                                                                          change3 = ((`19` - `0`)/`0`)*100)
+
+```
+
+
+## respiration effect sizes with models
+```{r}
+#full model
+change1<- lmer(change1 ~ wound*temp + (1|genotype), data = resp.change%>%filter(rate == "Respiration"))
+
+#reduced model 
+change1<- lmer(change1 ~ wound + temp + (1|genotype), data = resp.change%>%filter(rate == "Respiration"))
+summary(change1)
+anova(change1)
+library(broom.mixed)
+library(forcats)
+
+
+tidy_bm <- tidy(change1, conf.int = TRUE, effects = "fixed") %>%
+  filter(term != "(Intercept)")
+
+ggplot(tidy_bm, aes(y = term, xmin = conf.low, xmax = conf.high, x = estimate, color = p.value < 0.05)) +
+  geom_pointrange() +  # Point range plot to show estimates and intervals
+  scale_color_manual(values = c("red", "blue"), 
+                     labels = c("Not Significant", "Significant"),
+                     guide = guide_legend(title = "Significance")) +
+  labs(title = "Estimates and Confidence Intervals for Model Terms",
+       x = "Estimate and Confidence Interval",
+       y = "Model Term") +
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 10),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.key=element_rect(fill="white"),
+    strip.text = element_text(size = 10),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 10),
+    axis.ticks = element_blank(), 
+    axis.title.x = element_text(size = 10),
+    axis.line = element_line(color = "black") 
+  )
+
+
+```
+
+```{r}
+#full model change 2
+change2<- lmer(change2 ~ wound*temp + (1|genotype), data = resp.change%>%filter(rate == "Respiration"))
+summary(change2)
+anova(change2)
+
+#reduced model change 2
+change2<- lmer(change2 ~ wound + temp + (1|genotype), data = resp.change%>%filter(rate == "Respiration"))
+summary(change2)
+anova(change2)
+
+tidy_bm <- tidy(change2, conf.int = TRUE, effects = "fixed") %>%
+  filter(term != "(Intercept)")
+
+ggplot(tidy_bm, aes(y = term, xmin = conf.low, xmax = conf.high, x = estimate, color = p.value < 0.05)) +
+  geom_pointrange() +  # Point range plot to show estimates and intervals
+  scale_color_manual(values = c("red", "blue"), 
+                     labels = c("Not Significant", "Significant"),
+                     guide = guide_legend(title = "Significance")) +
+  labs(title = "Estimates and Confidence Intervals for Model Terms",
+       x = "Estimate and Confidence Interval",
+       y = "Model Term") +
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 10),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.key=element_rect(fill="white"),
+    strip.text = element_text(size = 10),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 10),
+    axis.ticks = element_blank(), 
+    axis.title.x = element_text(size = 10),
+    axis.line = element_line(color = "black") 
+  )
+
+```
+
+
+```{r}
+#full model change 3
+change3<- lmer(change3 ~ wound*temp + (1|genotype), data = resp.change%>%filter(rate == "Respiration"))
+summary(change3)
+anova(change3)
+lsmeans(change3, pairwise~wound*temp, adjust="tukey")
+
+tidy_bm <- tidy(change3, conf.int = TRUE, effects = "fixed") %>%
+  filter(term != "(Intercept)")
+
+ggplot(tidy_bm, aes(y = term, xmin = conf.low, xmax = conf.high, x = estimate, color = p.value < 0.05)) +
+  geom_pointrange() +  # Point range plot to show estimates and intervals
+  scale_color_manual(values = c("red", "blue"), 
+                     labels = c("Not Significant", "Significant"),
+                     guide = guide_legend(title = "Significance")) +
+  labs(title = "Estimates and Confidence Intervals for Model Terms",
+       x = "Estimate and Confidence Interval",
+       y = "Model Term") +
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 10),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.key=element_rect(fill="white"),
+    strip.text = element_text(size = 10),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 10),
+    axis.ticks = element_blank(), 
+    axis.title.x = element_text(size = 10),
+    axis.line = element_line(color = "black") 
+  )
+
+```
+## respiration - percent change
+```{r}
+
+resp.change%>% pivot_longer(cols = c("change1", "change2", "change3"),
+               names_to = "timepoint",
+               values_to = "percent.change") -> rate.change.long
+
+
+summarySE(data = rate.change.long, measurevar = "percent.change", groupvars = c("rate", "temp", "timepoint","wound"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary
+
+summarySE(data = rate.change.long, measurevar = "percent.change", groupvars = c("rate", "temp", "timepoint"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary2
+
+dodge<-position_dodge(width=0.6) # this offsets the points so they don't overlap
+
+ggplot(summary%>%filter(timepoint == "change1"), aes(x = temp, y = percent.change, colour = temp, fill = temp))+
+  facet_wrap(rate~wound, scales = "free", labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+  geom_bar(stat="identity", position="dodge") +geom_errorbar(aes(ymin=percent.change-se, ymax=percent.change+se), width=0, position=position_dodge(width = 0.9))+
+  geom_point(data = rate.change.long%>%filter(timepoint == "change1"), aes(x = temp, y = percent.change, colour = temp), shape = 21, alpha = 0.7,
+             position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('black', 'black', 'black'), guide="none")+
+  scale_fill_manual(values = c('white', 'grey'), labels=c("Ambient", "Elevated"), guide = "none")+
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Temperature"))+
+  ylab(expression(paste("Rate (mg/cm2/day)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 12)
+
+ggplot(summary, aes(x = timepoint, y = percent.change, fill = temp, colour =temp))+
+  facet_wrap(~rate, scale = "free")+
+  geom_bar(stat="identity", position= position_dodge(width = 0.9))+
+  geom_errorbar(aes(ymin=percent.change-se, ymax=percent.change+se), width=0, position=position_dodge(width = 0.9))+
+  geom_point(data = rate.change.long, aes(x = timepoint, y = percent.change, colour = temp, fill = temp), shape = 21, alpha = 0.5,position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('black', 'black'), guide="none")+
+ scale_fill_manual(values = c('white', 'darkgrey'), guide = "none")+
+  scale_x_discrete(labels = c('1','10', '19'))+
+xlab(expression("Day"))+
+  ylab(expression(paste("Percent Change in Rate")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 12)
+
+rate.change.long$rate <- factor(rate.change.long$rate, levels = c("Respiration", "Gross Photosynthesis", "Net Photosynthesis"))
+summary$rate <- factor(summary$rate, levels = c("Respiration", "Gross Photosynthesis", "Net Photosynthesis"))
+rates.filtered$rate <- factor(rates.filtered$rate, levels = c("Respiration", "Gross Photosynthesis", "Net Photosynthesis"))
+
+ggplot(data = rate.change.long, aes(x = timepoint,y = percent.change, fill = temp))+facet_grid(rate ~ wound, scales = "free", labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+            stat_summary(geom = "col", fun = mean, width = 0.7,col = c("black"), stat = "identity", position= position_dodge(width = 0.9)) +
+ # geom_point(data = rate.change.long, aes(x = timepoint, y = percent.change, fill = temp), shape = 21, alpha = 0.5,position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  geom_errorbar(data = summary, aes(x = timepoint, ymin=percent.change-se, ymax=percent.change+se), width=0, position=position_dodge(width = 0.9))+
+  theme_light(base_size = 20) +
+  scale_x_discrete(labels = c('1','10', '19'))+
+  scale_fill_manual(values = c('white', 'darkgrey'))+
+xlab(expression("Day"))+
+  ylab(expression(paste("Mean Percent Change")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 12)
+
+figure_1 <- ggplot(data = rates.filtered, aes(x = as.factor(timepoint),y = umol.cm2.hr, fill = temp))+facet_grid(rate~wound, scales = "free", labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+            stat_summary(geom = "col", fun = mean, width = 0.7,col = c("black"), stat = "identity", position= position_dodge(width = 0.9)) +
+  geom_point(data = rates.filtered, aes(x = as.factor(timepoint), y = umol.cm2.hr, fill = temp), shape = 21, alpha = 0.5,position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  #geom_errorbar(data = summary, aes(x = timepoint, ymin=percent.change-se, ymax=percent.change+se), width=0, position=position_dodge(width = 0.9))+
+  theme_light(base_size = 40) +
+  scale_x_discrete(labels = c('0','1','10', '19'))+
+  scale_fill_manual(values = c('white', 'darkgrey'), guide = "none")+
+xlab(expression("Day"))+
+  ylab(expression(paste("O2 rate (umol/cm2/hr)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 24)
+
+ggsave("figure_3.png", plot = figure_1, path = here(),
+       width = 8,
+       height = 8,
+       scale =2,
+       units = "in")
+
+```
+
+
+```{r}
+summary(rates.filtered%>%filter(rate == "Respiration", !timepoint == "0"))
+
+summarySE(rates.filtered%>%filter(rate == "Respiration", !timepoint == "0"), measurevar = "umol.cm2.hr", groupvars = c("timepoint", "temp", "wound"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary
+```
+
+
+
+## Respiration Figure with time as continuous variable. Acclimation to temperature? 
+```{r}
+ggplot(data = rates.filtered%>%filter(rate == "Respiration"), aes(x = timepoint, y = umol.cm2.hr, color = temp))+geom_point()+geom_smooth(method = "lm")
+
+ggplot(data = rates.filtered%>%filter(rate == "Respiration", !timepoint == "0"), aes(x = timepoint, y = umol.cm2.hr, color = temp))+geom_point()+geom_smooth(method = "lm")+facet_wrap(~wound)
+
+# double check that resp is the same at day 0 
+
+```
+
+
+# NET PHOTOSYNTHESIS 
+Run Models: The full model includes fixed effects wound, temp, and timepoint. Percent_affected is included as a covariate. 
+```{r}
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Net Photosynthesis"))
+summary(mod)
+Anova(mod)
+anova(mod)
+
+
+```
+
+Summary Statistics
+```{r}
+summary(rates.filtered%>%filter(rate == "Net Photosynthesis")) 
+
+summarySE(rates.filtered%>%filter(rate == "Net Photosynthesis"), measurevar = "umol.cm2.hr", groupvars = c("timepoint", "temp", "wound"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.net
+```
+
+
+Net Photosynthesis Figure. Wound, temperature, and time interact to increase Net photosynthesis ? 
+```{r}
+ggplot(data = rates.filtered%>%filter(rate == "Net Photosynthesis"), aes(x = timepoint, y = umol.cm2.hr, color = temp))+geom_point()+geom_smooth(method = "lm")
+
+ggplot(data = rates.filtered%>%filter(rate == "Net Photosynthesis"), aes(x = timepoint, y = umol.cm2.hr, color = temp))+geom_point()+geom_smooth(method = "lm")+facet_wrap(~wound)
+
+```
+
+Percent change models
+```{r}
+#full model
+change1<- lmer(change1 ~ wound*temp + (1|genotype), data = resp.change%>%filter(rate == "Net Photosynthesis"))
+
+#reduced model 
+change1<- lmer(change1 ~ wound + temp + (1|genotype), data = resp.change%>%filter(rate == "Net Photosynthesis"))
+summary(change1)
+anova(change1)
+
+
+
+tidy_bm <- tidy(change1, conf.int = TRUE, effects = "fixed") %>%
+  filter(term != "(Intercept)")
+
+ggplot(tidy_bm, aes(y = term, xmin = conf.low, xmax = conf.high, x = estimate, color = p.value < 0.05)) +
+  geom_pointrange() +  # Point range plot to show estimates and intervals
+  scale_color_manual(values = c("red", "blue"), 
+                     labels = c("Not Significant", "Significant"),
+                     guide = guide_legend(title = "Significance")) +
+  labs(title = "Estimates and Confidence Intervals for Model Terms",
+       x = "Estimate and Confidence Interval",
+       y = "Model Term") +
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 10),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.key=element_rect(fill="white"),
+    strip.text = element_text(size = 10),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 10),
+    axis.ticks = element_blank(), 
+    axis.title.x = element_text(size = 10),
+    axis.line = element_line(color = "black") 
+  )
+
+
+```
+
+
+```{r}
+#full model change 2
+change2<- lmer(change2 ~ wound*temp + (1|genotype), data = resp.change%>%filter(rate == "Net Photosynthesis"))
+summary(change2)
+anova(change2)
+
+#reduced model change 2
+change2<- lmer(change2 ~ wound + temp + (1|genotype), data = resp.change%>%filter(rate == "Net Photosynthesis"))
+summary(change2)
+anova(change2)
+
+tidy_bm <- tidy(change2, conf.int = TRUE, effects = "fixed") %>%
+  filter(term != "(Intercept)")
+
+ggplot(tidy_bm, aes(y = term, xmin = conf.low, xmax = conf.high, x = estimate, color = p.value < 0.05)) +
+  geom_pointrange() +  # Point range plot to show estimates and intervals
+  scale_color_manual(values = c("red", "blue"), 
+                     labels = c("Not Significant", "Significant"),
+                     guide = guide_legend(title = "Significance")) +
+  labs(title = "Estimates and Confidence Intervals for Model Terms",
+       x = "Estimate and Confidence Interval",
+       y = "Model Term") +
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 10),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.key=element_rect(fill="white"),
+    strip.text = element_text(size = 10),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 10),
+    axis.ticks = element_blank(), 
+    axis.title.x = element_text(size = 10),
+    axis.line = element_line(color = "black") 
+  )
+
+```
+
+
+```{r}
+#full model change 3
+change3<- lmer(change3 ~ wound*temp + (1|genotype), data = resp.change%>%filter(rate == "Net Photosynthesis"))
+
+#reduced model
+change3<- lmer(change3 ~ wound + temp + (1|genotype), data = resp.change%>%filter(rate == "Net Photosynthesis"))
+summary(change3)
+anova(change3)
+lsmeans(change3, pairwise~wound*temp, adjust="tukey")
+
+tidy_bm <- tidy(change3, conf.int = TRUE, effects = "fixed") %>%
+  filter(term != "(Intercept)")
+
+ggplot(tidy_bm, aes(y = term, xmin = conf.low, xmax = conf.high, x = estimate, color = p.value < 0.05)) +
+  geom_pointrange() +  # Point range plot to show estimates and intervals
+  scale_color_manual(values = c("red", "blue"), 
+                     labels = c("Not Significant", "Significant"),
+                     guide = guide_legend(title = "Significance")) +
+  labs(title = "Estimates and Confidence Intervals for Model Terms",
+       x = "Estimate and Confidence Interval",
+       y = "Model Term") +
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 10),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.key=element_rect(fill="white"),
+    strip.text = element_text(size = 10),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 10),
+    axis.ticks = element_blank(), 
+    axis.title.x = element_text(size = 10),
+    axis.line = element_line(color = "black") 
+  )
+
+```
+
+
+# GROSS PHOTOSYNTHESIS 
+Run Models: The full model includes fixed effects wound, temp, and timepoint. Percent_affected is included as a covariate. 
+```{r}
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Gross Photosynthesis"))
+summary(mod)
+anova(mod)
+
+summary(rates.filtered%>%filter(rate == "Gross Photosynthesis"))
+```
+
+Gross Photosynthesis Figure 
+```{r}
+ggplot(data = rates.filtered%>%filter(rate == "Gross Photosynthesis"), aes(x = timepoint, y = umol.cm2.hr, color = temp))+geom_point()+geom_smooth(method = "lm")
+
+ggplot(data = rates.filtered%>%filter(rate == "Gross Photosynthesis"), aes(x = timepoint, y = umol.cm2.hr, color = temp))+geom_point()+geom_smooth(method = "lm")+facet_wrap(~wound)
+
+summarySE(rates.filtered%>%filter(rate == "Gross Photosynthesis"), measurevar = "umol.cm2.hr", groupvars = c("timepoint", "temp", "wound"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.gross
+
+```
+
+# All rates. 
+```{r}
+ggplot(data = rates.filtered%>%filter(!timepoint == 0), aes( x = timepoint, y = umol.cm2.hr, color = temp))+ geom_point(position = "jitter")+geom_smooth(method = "lm")+ facet_wrap(rate~wound) 
+
+```
+
+```{r}
+rates.filtered%>%filter(!rate == "Net Photosynthesis")%>%select(rate, coral_id, temp, wound, genotype, timepoint, umol.cm2.hr)%>%pivot_wider(names_from = rate, values_from = umol.cm2.hr)%>%clean_names() -> rates.wide
+
+rates.wide%>%mutate(ratio = ((12*gross_photosynthesis)/(24*respiration))) ->ratio
+
+ggplot(data = ratio, aes( x = as.factor(timepoint), y = ratio, color = temp))+ geom_boxplot()+geom_point(position = "jitter", alpha = .5)+ facet_wrap(~wound) 
+
+#full model 
+mod<- lmer(ratio ~ wound*temp*timepoint + (1|genotype/coral_id), data = ratio)
+summary(mod)
+anova(mod)
+
+summary(ratio)
+summarySE(ratio, measurevar = "ratio", groupvars = c("timepoint", "temp", "wound"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.ratio
+ratio.filtered = subset(ratio%>%filter(timepoint == "10"), ratio > 1)
+
+```
+
+
+# Getting summary statistics for all three rates. I'm interested in 1) the range of rates (minimum and maximum) and 2) 
+```{r}
+# RESPIRATION - temperature*time
+summarySE(rates.filtered%>%filter(rate == "Respiration"), measurevar = "umol.cm2.hr", groupvars = c("timepoint", "temp"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.resp
+
+summarySE(rate.change.long%>%filter(rate == "Respiration"), measurevar = "percent.change", groupvars = c("timepoint", "temp"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.resp.change
+
+# NET PHOTOSYNTHESIS - time + temperature*time
+summarySE(rates.filtered%>%filter(rate == "Net Photosynthesis"), measurevar = "umol.cm2.hr", groupvars = c("timepoint", "temp"), na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.net
+# GROSS PHOTOSYNTHESIS - temperature + time
+summarySE(rates.filtered%>%filter(rate == "Gross Photosynthesis"), measurevar = "umol.cm2.hr", groupvars = c("timepoint", "temp"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.gross
+summarySE(rate.change.long%>%filter(rate == "Gross Photosynthesis"), measurevar = "percent.change", groupvars = c("timepoint", "temp"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.gross.change
+
+# PERCENT CHANGE
+summarySE(rate.change.long%>%filter(rate == "Net Photosynthesis"), measurevar = "percent.change", groupvars = c("timepoint", "temp", "wound"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.net.change
+# P:R
+summarySE(ratio, measurevar = "ratio", groupvars = c("timepoint", "temp", "wound"), na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.ratio
+```
+
+```{r}
+# PERCENT CHANGE
+summarySE(rate.change.long, measurevar = "percent.change", groupvars = c("rate", "timepoint", "temp", "wound"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) -> summary.all.change
+
+
+summary.all.change%>%mutate(timepoint = case_when(timepoint == "change1" ~ "1",
+                                     timepoint == "change2" ~ "10",
+                                     timepoint == "change3" ~ "19"))-> summary.all.change
+
+ggplot(data = summary.all.change, aes(x = as.numeric(timepoint), y = percent.change, col = temp, shape = wound))+geom_point()+facet_wrap(rate~temp, scales = "free")
+```
+
+
+
+
+
+

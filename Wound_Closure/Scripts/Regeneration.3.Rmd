@@ -1,0 +1,22 @@
+---
+title: "Wound Area created by Injuries in ARC regen proj"
+author: "Ninah Munk"
+date: "2024-06-07"
+output: html_document
+---
+
+load packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(janitor)
+
+```
+
+# load data
+```{r}
+
+wound_amount<-read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Data/wound_type_1_measurements.csv")%>%clean_names()
+```
+

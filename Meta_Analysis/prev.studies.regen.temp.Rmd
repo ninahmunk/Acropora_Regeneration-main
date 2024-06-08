@@ -1,0 +1,65 @@
+---
+title: Figure for summarizing results of previous studies on coral regeneration and
+  growth
+author: "Ninah Munk"
+date: "2024-06-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
+library(janitor)
+library(emmeans)
+library(plyr)
+library(ggthemes)
+library(here)
+library(tidyverse)
+```
+
+
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Meta_Analysis/prev.studies.regen.temp.csv")-> data
+
+data%>%select(study, growth.outcome, regen.outcome, tradeoff.outcome, temp.injury.synergy, study.type) -> data
+
+```
+
+
+
+```{r}
+data%>%pivot_longer(cols = c("growth.outcome", "regen.outcome", "tradeoff.outcome", "temp.injury.synergy"), names_to = "Category", values_to = "Result")%>%mutate(Result = as.factor(Result))%>%mutate(Result = case_when(Result == "1" ~ "Increased",
+                                     Result == "-1" ~ "Reduced",
+                                     Result == "0" ~ "No Effect",
+                                     Result == "NA" ~ "Not Reported")) -> data.long
+
+```
+
+
+
+```{r}
+ggplot(data = data.long, aes(x = Category, y = Result, col = as.factor(study)))+geom_point(position = "jitter")
+ggplot(data = data.long, aes(x = Category, y = Result, col = as.factor(study)))+geom_boxplot()
+```
+
+
+```{r}
+data.long%>%filter(Category == c("growth.outcome", "regen.outcome"))-> data.long.filtered
+ggplot(data = data.long.filtered, aes(x = Result))+geom_bar()+facet_wrap(~Category, labeller = labeller(Category = c("growth.outcome" = "Coral Growth Post Injury at High Temperature", "regen.outcome" = "Coral Regeneration Post Injury at High Temperaure")))+theme_clean()
+
+
+```
+
+
+```{r}
+data.long%>%filter(Category == c("tradeoff.outcome"))%>%mutate(Result = case_when(Result == "Increased" ~ "Regeneration > Growth",
+                                     Result == "Reduced" ~ "Regeneration < Growth",
+                                     Result == "No Effect" ~ "No Tradeoff",
+                                     Result == "NA" ~ "Not Reported"))-> data.long.filtered2
+
+ggplot(data = data.long.filtered2, aes(x = Result))+geom_bar()+facet_wrap(~Category, labeller = labeller(Category = c("tradeoff.outcome" = "Tradeoffs between Regeneration and Growth at High Temperature")))+theme_clean()
+```
+

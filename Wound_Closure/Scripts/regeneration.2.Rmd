@@ -1,0 +1,117 @@
+---
+title: "regeneration.20240524"
+author: "Ninah Munk"
+date: "2024-05-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggfortify)
+library(survival)
+library(gtsummary)
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
+library(tidyverse)
+library(janitor)
+library(emmeans)
+library(plyr)
+library(ggthemes)
+#library(survMisc)
+```
+
+
+# Load data and combine 
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/all.wounds.csv")%>%select(-wound_type) -> regen
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")-> samp.info
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv") -> SA
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")%>%select(coral_id, affected, percent_affected)-> worm
+
+regen%>%left_join(samp.info, by = "coral_id")%>%left_join(SA, by = "coral_id")%>%left_join(worm, by = "coral_id")%>%select(-X) -> data
+
+```
+
+
+# modify data set 
+```{r}
+
+data[data == "no"] <- "0"
+data[data == "no "] <- "0"
+data[data == "yes"] <- "1"
+data[data == " yes"] <- "1"
+data[data == "nyes"] <- "1"
+data[data == "initial"] <- "0"
+data[data == "24hr"] <- "1"
+data[data == "day10"] <- "10"
+data[data == "final"] <- "19"
+
+data%>%mutate(radial_coralite_structure = as.factor(radial_coralite_structure), 
+               radial_coralite_polyps = as.factor(radial_coralite_polyps),
+               apical_coralite.structure = as.factor(apical_coralite.structure),
+               healed = as.factor(healed),
+               tissue_over_wound = as.factor(apical_coralite.structure),
+               wound = as.factor(wound),
+               temp = as.factor(temp),
+               genotype = as.factor(genotype))-> data
+```
+
+
+# FILTERING DATA TO REMOVE WORM EFFECT
+Here I filter the data to use only the corals that had low worm damage. This threshold is <= 10% worm damage and was determined using the growth rate dataset. The remaining sample size is N = 16
+```{r}
+data = subset(data, percent_affected <= 10)
+```
+
+# Clean Data
+```{r}
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
+data <- data[!(data$coral_id %in% corals_to_remove), ]
+```
+
+# HOW MANY OF THE REMAINING CORALS DO I ALSO HAVE REGENERATION DATA FOR? 
+Out of the 71 corals I have growth data on, I have regeneration data for 14 corals. (16 if i dont clean the dataset)
+```{r}
+print(data %>% group_by(coral_id) %>% reframe(samp.size=n()))
+print(data %>% group_by(time_point, wound, temp) %>% reframe(samp.size=n()))
+```
+
+# survival and cox models
+```{r}
+
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data%>%select(coral_id, time_point, healed, wound, temp)%>%group_by(coral_id)%>%filter(lag(healed)!=1)%>%ungroup()%>%filter(healed == 1 | time_point == 19) %>% mutate(time_point = as.numeric(time_point), healed = as.character(healed), healed = as.numeric(healed))-> survival
+# survfit is model function (like  a glm), surv() function to create dependent df (when the event happened (time) and what was event (event)) as a function of wound
+surv.mod<- survfit(Surv(time = time_point, event = healed)~ wound, data = survival) #can see median time to healing is lower for wound 1, but cant say that is sig bc no upper CI 
+summary(survfit(Surv(time = time_point, event = healed)~ wound, data = survival))
+# put model inside autoplot() to visualize, fun = event to switch direction of healing 
+autoplot(survfit(Surv(time = time_point, event = healed)~ wound, data = survival), fun = 'event') -> p1
+# cox.zph() assumption check to see if hazard ratio is changing over time (p<0.05 is bad)
+cox.zph(coxph(Surv(time_point, healed)~wound + temp, data = survival))
+# harard ratio, CI, and p value for wound 2 with respect to wound 1. HR<1, CI not crossing 1, p<0.05 all mean that at any point in time individuals with wound 2 have less probability to be healed 
+coxph(Surv(time_point, healed)~wound + temp, data = survival) %>% tbl_regression(exp = T)
+
+p1+xlab("Time (days")+ ylab("Survival (%)")+
+  guides(fill="none") +
+  labs(colour = "Injury Type") +
+  scale_colour_brewer(type = "qual", palette = "Dark2",
+                    guide = guide_legend(keywidth = 3, keyheight = 3), labels = c("Fragmentation", "Abrasion"))+theme_classic()
+
+```
+
+# glm
+
+```{r}
+m1<- glm(healed ~ wound*temp, data = data%>%filter(time_point == "19"), family = binomial)
+summary(m1)
+```
+
+# how many corals healed by the end of experiment?
+```{r}
+view(data%>%filter(time_point == 19, wound == 1)) # 7/7 = 100% of fragmented corals
+view(data%>%filter(time_point == 19, wound == 2)) # 6/7 
+```
+
