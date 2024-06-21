@@ -1,5 +1,5 @@
 ---
-title: "Wound Area created by Injuries in ARC regen proj"
+title: "Quantifying Wound Area and total loss of tissue surface area due to Injuries in ARC regen proj"
 author: "Ninah Munk"
 date: "2024-06-07"
 output: html_document
@@ -14,9 +14,77 @@ library(janitor)
 
 ```
 
-# load data
+# load data: fragment.area is the wound closure data which lexi collected in imagej. SA.lost are the dimensions of removed coral branches as a result of the fragmentation injury.  
 ```{r}
+fragment.area<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/fragment.only.measurements.csv")%>%clean_names()
+abrasion.area<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/abrasion_msmts.csv")%>%clean_names()
 
-wound_amount<-read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Data/wound_type_1_measurements.csv")%>%clean_names()
+frag.SA.lost<-read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Data/wound_type_1_measurements.csv")%>%clean_names()
+
 ```
+
+# clean data
+```{r}
+fragment.area$time_point_initial <- factor(fragment.area$time_point_initial, levels = c("initial", "24hr", "day10", "final"), labels = c("0", "1", "10", "19")) 
+```
+
+
+
+# clean frag.SA.lost data and calculate SA of the coral branch that was removed; MEAN SURFACE AREA LOST BY CREATING THE FRAGMENTATION WOUND WAS 1.0717 cm2
+```{r}
+frag.SA.lost%>%drop_na()-> frag.SA.lost # only fragmented corals now
+
+frag.SA.lost%>%
+  mutate(branch_height_cm = branch_h_mm / 10) %>%
+  mutate(avg_diameter_mm= (base_d_mm + tip_d_mm) / 2)%>%
+  mutate(radius_cm = (avg_diameter_mm/2)/10)%>%
+  mutate(radius_tip_cm = (tip_d_mm/2)/10)%>%
+  mutate(SA.lost= (2*3.14*(radius_cm*branch_height_cm) + 3.14*(radius_tip_cm)^2)) -> frag.SA.lost
+
+summary(frag.SA.lost)
+summarySE(data = frag.SA.lost, measurevar = "SA.lost",
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+
+frag.SA.lost%>%select(coral_id, genotype, wound, temperature, SA.lost)-> frag.SA
+```
+
+# caluclate SA of abrasion injury using lengths of the abrased area collected in imagej by lexi, these measurements are day 1 timepoint. MEAN SURFACE AREA LOST AND LEFT BEHIND BY CREATING THE ABRASION WOUND WAS 0.9493 cm2
+```{r}
+# first getting average branch radius and average tip radius to use for calculating SA of abrasion injury
+abrasion.radius<- mean(frag.SA.lost$radius_cm) # 0.1495 cm
+abrasion.radius.tip<- mean(frag.SA.lost$radius_tip_cm) #0.1008056 cm
+
+abrasion.area%>%
+  mutate(branch_height_cm = length_mm /10)%>%
+  mutate(radius_cm = 0.1495)%>%
+  mutate(radius_tip_cm = 0.1008056)%>%
+  mutate(SA.lost= (2*3.14*(radius_cm*branch_height_cm) + 3.14*(radius_tip_cm)^2)) -> abrasion.SA
+
+summarySE(data = abrasion.SA, measurevar = "SA.lost",
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+
+summary(abrasion.SA)
+```
+
+# WHAT WAS THE AVERAGE SURFACE AREA LEFT BEHIND BY THE FRAGMENTATION WOUND? derived from imagej: 0.2228  cm2
+```{r}
+fragment.area%>%
+  filter(time_point_initial == 0)%>%
+  mutate(area.cm2 = area_mm2 / 100)-> frag.initial.area
+
+summarySE(data = frag.initial.area, measurevar = "area.cm2",
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+summary(frag.initial.area)
+```
+
+# WHAT WAS THE AVERAGE SURFACE AREA LEFT BEHIND BY THE FRAGMENTATION WOUND? derived from fragment base diameter: 0.12875 cm2
+```{r}
+frag.SA.lost%>%
+  mutate(base_d_cm = base_d_mm / 10)%>%
+  mutate(base.r.cm = base_d_cm/2)%>%
+  mutate(area.base = 3.14*((base.r.cm)^2))-> area.base
+summary(area.base)
+```
+
+
 

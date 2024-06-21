@@ -1,0 +1,151 @@
+---
+title: "bouyant weights"
+author: "Ninah Munk"
+date: "2024-06-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
+library(tidyverse)
+library(janitor)
+library(emmeans)
+library(plyr)
+library(ggthemes)
+library(here)
+library(pbkrtest)
+library(sjPlot)
+library(knitr)
+library(kableExtra)
+library(readxl)
+
+
+```
+
+# load data
+```{r}
+
+data0<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Data/bouyantweight_initial.xlsx", sheet= "raw_data")%>%clean_names()%>%select(coral_id, bouyantweight_g)%>%mutate(time = "0")
+data1<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Data/bouyantweight_24hr.xlsx", sheet= "raw_data")%>%clean_names()%>%select(coral_id, bouyantweight_g)%>%mutate(time = "1")
+data10<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Data/bouyantweight_day10.xlsx", sheet= "raw_data")%>%clean_names()%>%select(coral_id, bouyantweight_g)%>%mutate(time = "10")
+data19<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Growth/Data/bouyantweight_final.xlsx", sheet= "raw_data")%>%clean_names()%>%select(coral_id, bouyantweight_g)%>%mutate(time = "19")
+```
+
+
+# combine data
+```{r}
+rbind(data0, data1, data10, data19)-> data
+
+ggplot(data, aes(y = bouyantweight_g, x = time, col = coral_id))+geom_point(position = "jitter")
+```
+
+
+#clean data
+```{r}
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
+data <- data[!(data$coral_id %in% corals_to_remove), ]
+```
+
+
+# make data wide 
+```{r}
+data%>%pivot_wider(names_from =time, values_from = bouyantweight_g)-> data.wide
+
+data.wide%>%mutate(bw.growth = `19` - `1`)-> data.wide
+
+```
+
+# upload additional information about the corals, join with data, and make dataframe wide 
+```{r}
+#get post wound surface areas, sample info, and worm damage
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv")-> SA
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")-> samp.info
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")%>%select(coral_id, percent_affected)-> worm
+
+data.wide%>%left_join(SA, by = "coral_id")%>%left_join(samp.info, by = "coral_id")%>%left_join(worm, by = "coral_id")-> data.wide
+
+data.wide%>%mutate(bw.cm2.d = (bw.growth / SA_post_wound)/19)-> data.wide
+
+data.wide%>%mutate(wound = as.factor(wound),
+                   temp = as.factor(temp),
+                   genotype = as.factor(genotype))-> data.wide
+
+
+```
+# linear mixed model of growth using bouyant weights
+```{r}
+full<- lmer(bw.cm2.d ~ wound*temp*percent_affected + (1|genotype), data = data.wide, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(full, type = 3) # percent affected highly significant
+```
+# Filter data for less than 10% worm damage and run model again
+```{r}
+data.filtered = subset(data.wide, percent_affected <= 10) 
+#full 
+full<- lmer(bw.cm2.d ~ wound*temp*percent_affected + (1|genotype), data = data.filtered, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(full, type = 3)
+#reduced 
+full<- lmer(bw.cm2.d ~ wound*temp + temp*percent_affected + (1|genotype), data = data.filtered, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(full, type = 3) # no significance of percent affected
+
+```
+
+# run model without covariate (percent_affected), since it is no longer significant 
+```{r}
+full<- lmer(bw.cm2.d ~ wound*temp + (1|genotype), data = data.filtered, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(full, type = 3) # no significance
+
+
+ggplot(data = data.filtered, aes(x = wound, y = bw.cm2.d, col = temp))+geom_boxplot()
+```
+
+
+```{r}
+data.filtered%>%unite("treatment", wound:temp, remove = FALSE)%>%select(coral_id, genotype, wound, temp, treatment, bw.cm2.d)%>%mutate(bw.cm2.d = bw.cm2.d*1000) -> data.filtered
+# Calculating mean growth for each group to plot.
+data.filtered%>%group_by(wound, temp)%>%summarize(Mean = mean(bw.cm2.d, na.rm=TRUE),'N'=length(bw.cm2.d))-> meangrowthrate
+
+data.filtered%>%aggregate(bw.cm2.d ~ treatment, FUN = function(x) sd(x)/sqrt(length(x)))%>%separate(col = treatment, into = c("wound", "temp")) -> std_err
+
+
+#meangrowthrate$wound <- factor(meangrowthrate$wound, levels = c("No Injury", "Fragmentation", "Abrasion"))
+
+
+dodge<-position_dodge(width=0.6) # this offsets the points so they don't overlap
+
+ggplot(meangrowthrate, aes(x = temp, y = Mean, colour = temp, fill = temp))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+  geom_bar(stat="identity", position="dodge") +geom_errorbar(aes(ymin=Mean-std_err$bw.cm2.d, ymax=Mean+std_err$bw.cm2.d), width=0, position=position_dodge(width = 0.9))+
+  geom_point(data = data.filtered, aes(x = temp, y = bw.cm2.d, colour = temp), shape = 21, alpha = 0.7, position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('black', 'black', 'black'), guide="none")+
+  scale_fill_manual(values = c('white', 'grey'), labels=c("Ambient", "Elevated"), guide = "none")+
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Temperature"))+
+  ylab(expression(paste("Buoyant Growth Rate (mg/cm2/day)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 12) -> figure2
+
+print(figure2)
+
+ggsave("figure_2.png", plot = figure2, path = here(),
+       width = 8,
+       height = 8,
+       units = "in")
+
+```
+
+# summary statistics 
+```{r}
+# range of growth rates across individual corals
+summary(data.filtered)
+
+summarySE(data = data.filtered, measurevar = "bw.cm2.d",
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+
+# rates of growth rates across treatments
+summarySE(data = data.filtered, measurevar = "bw.cm2.d", groupvars = c("wound", "temp"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+```
+

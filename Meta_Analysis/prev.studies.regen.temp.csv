@@ -1,10 +1,20 @@
-﻿study,growth.outcome,regen.outcome,tradeoff.outcome,temp.injury.synergy,wount.type,study.type,,,growth.outcome,regen.outcome,tradeoff.outcome,high.temp.injury.synergy
-1,1,-1,-1,1,abrasion,in situ,,1,increased growth post injury at high temp,increased regeneration post injury at high temp,regeneration>growth at high temp post injury,"yes, injury and high temp interact to increase growth"
-2,-1,-1,0,-1,fragmentation,ex situ,,0,no effect of injury x high temp on growth,no effect of injury x high temp on regen,no tradeoff at high temp post injury,no synergistic effect
-4,0,1,0,0,abrasion,ex situ,,-1,decreased growth post injury at high temp,decreased regeneration post injury at high temp,regeneration<growth at high temp post injury,"yes, injury and high temp interact to decrease growth"
-5,NA,-1,NA,-1,fragmentation,ex situ,,NA,did not report ,did not report ,did not report ,did not report 
-6,0,-1,0,0,abrasion,ex situ,,,,,,
-7,1,1,NA,NA,abrasion,ex situ ,,,,,,
-8,-1,0,0,-1,abrasion,ex situ,,,,,,
-9,1,0,0,1,abrasion,ex situ,,,,,,
-12,NA,-1,NA,NA,abrasion,in situ,,,,,,
+﻿"Table X. Previous studies investigating coral growth and regeneration post experimental injury in contrasting temperature regimes. The table displays each study with the associated injury and temperature treatments and whether coral growth and regeneration increased (+ ), decreased (-), or if there was no effect (∅).  Tradeoffs  between coral  growth and regeneration and synergistic interactions between treatments are also displayed. Unreported data is denoted by NA. ",,,,,,,
+,,,,,,,
+,,,,,,,
+,,,,,,,
+Study,Injury Type,Temperatures,Study Type,Growth,Regeneration ,Was there a tradeoff? ,Was there a synergistic effect of treatments?
+Edmunds and Lenihan 2009,abrasion,"26.7, 29.6",ex situ,-,∅,no,"yes, treatments interact to decrease growth"
+Lenihan and Edmunds 2010,abrasion,"26.6, 29.6",ex situ,+,∅,no,"yes, treatments interact to increase growth"
+"Bonnesso et al., 2016",fragmentation,"26, 32",ex situ,-,-,no,"yes, treatments interact to decrease growth"
+"Burmester et al., 2017",abrasion,"18, 24",ex situ ,+ ,+ ,NA,NA
+"Dias et al., 2018",abrasion,"26, 30, 32",ex situ,∅,+ ,no,no
+"Rice et al., 2019",abrasion,"26, 29",ex situ,∅,-,no,no
+"Kaufman et al., 2021",fragmentation,"28, 31.5",ex situ,NA,-,NA,"yes, treatments interact to decrease growth"
+"Denis et al., 2011",abrasion,"high, moderate, and low variation in sea surface temperature ",in situ,NA,-,NA,NA
+"Denis et al., 2013",abrasion,~29-27 and ~28-26.5 ,in situ,+ ,-,"yes, growth >  regeneration","yes, treatments interact to increase growth"
+,,,,,,,
+,,,,,,,
+,,,,,,,
+,,,,,,,
+,,,,,,,
+,,,,,,,

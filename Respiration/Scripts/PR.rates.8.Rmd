@@ -8,22 +8,19 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
 library(tidyverse)
 library(janitor)
 library(emmeans)
-library(lme4)
-library(Matrix)
-library(readxl)
-library(lmerTest)
-library(nlme)
-library(car)
-library(ggpubr)
-library(rstatix)
-library(Rmisc)
+library(plyr)
 library(ggthemes)
-library(effectsize)
 library(here)
+library(pbkrtest)
+library(sjPlot)
+library(knitr)
+library(kableExtra)
 ```
 
 # Load and Clean Data
@@ -33,16 +30,24 @@ read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respirati
 read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")-> worm
 ```
 
+# Clean Data
+```{r}
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
+data <- data[!(data$coral_num %in% corals_to_remove), ]
+```
+
+
 Clean up some data and combine data frames
 ```{r}
-data <- rename(data, replace = c("coral_num" = "coral_id"))
-data%>%select(-X) -> data
+data%>%rename(coral_id = coral_num)%>%select(-X) -> data
 
 worm%>%select(coral_id, affected, percent_affected)-> worm.damage
 
 data%>%left_join(worm.damage, by = "coral_id")-> data2
 
 ```
+
 
 Change timepoint to a continuous variable and numeric 
 ```{r}
@@ -60,7 +65,7 @@ data2%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
 
 # plotting rates against worm damage. All rates are reduced with increasing worm damage.
 ```{r}
-ggplot(data2%>%filter(timepoint == "0"), aes(x = percent_affected, y = umol.cm2.hr))+geom_point()+geom_smooth(method = "lm")+facet_grid(~rate)
+ggplot(data2, aes(x = percent_affected, y = umol.cm2.hr))+geom_point()+geom_smooth(method = "lm")+facet_grid( rate ~ timepoint)
 
 ```
 
@@ -69,7 +74,7 @@ Run Models: The full model includes fixed effects wound, temp, and timepoint. Pe
 ```{r}
 #full model 
 mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = data2%>%filter(rate == "Respiration"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-anova(mod)
+anova(mod, type = 3)
 
 ```
 
@@ -78,20 +83,377 @@ Filter data to remove worm effect determined from growth data. this threshold is
 rates.filtered = subset(data2, percent_affected <= 10)
 
 mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-anova(mod) #percent affected is not longer significant 
+anova(mod, type = 3) #percent affected is not longer significant 
 
-mod<- lmer(umol.cm2.hr ~ wound + temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"))
-anova(mod)# percent affected not significant in reduced model
+
+mod<- lmer(umol.cm2.hr ~ wound*temp + temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"))
+anova(mod, type = 3)# percent affected not significant in reduced model
 ```
 
 
 Run models with filtered data without percent affected as a covariate. There is a significant interaction between temperature and timepoint in all three models. This becomes more significant after filtering out initial timepoint, so this tells me this interaction is driven primarily by the following timepoints. 
 ```{r}
-
 #full model 
-mod<- lmer(umol.cm2.hr ~ wound*temp + (1| timepoint) + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration")%>%filter(!timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+#reduced
+mod<- lmer(umol.cm2.hr ~ wound*temp + temp*timepoint + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration")%>%filter(!timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # significant interaction between temp and time
 
-mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Respiration"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+```
+
+Model for Respiration broken into each timepoint 
+```{r}
+# DAY 0 
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Respiration")%>%filter(timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+# DAY 1
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Respiration")%>%filter(timepoint == 1), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # temp is highly significant
+
+lsmeans(mod, pairwise~wound*temp, adjust="tukey")
+
+# DAY 10
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Respiration")%>%filter(timepoint == 10), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # temp is highly significant
+
+# DAY 19
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Respiration")%>%filter(timepoint == 19), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # temp is highly significant
+```
+
+```{r}
+
+rates.filtered <- rates.filtered %>%
+  mutate(wound2=case_when(
+    wound== "0" ~ "Control",
+    wound== "1" ~ "Injured",
+    wound == "2"~ "Injured"))
+
+mod<- lmer(umol.cm2.hr ~ wound2*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Respiration")%>%filter(timepoint == 1), contrasts = list(wound2 = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+lsmeans(mod, pairwise~wound2*temp, adjust="tukey")
+
+```
+
+
+```{r}
+rates.filtered%>%filter(rate == "Respiration")%>%filter(timepoint == 1) -> mean.resp
+mean.resp%>%unite("treatment", c("wound2", "temp"), remove = FALSE) -> mean.resp
+
+# Calculating mean growth for each group to plot.
+mean.resp%>%group_by(wound2, temp)%>%summarize(Mean = mean(umol.cm2.hr, na.rm=TRUE),
+                                                        'N'=length(umol.cm2.hr ))-> mean
+
+mean.resp%>%aggregate(umol.cm2.hr ~ treatment, FUN = function(x) sd(x)/sqrt(length(x)))%>%separate(col = treatment, into = c("wound2", "temp")) -> std_err
+
+# Assuming all contrasts were significant for simplicity; this may change based on actual results.
+mean$letter <- c("abc", "ac", "b","ca")
+
+dodge<-position_dodge(width=0.6) # this offsets the points so they don't overlap
+
+  ggplot(mean, aes(x = temp, y = Mean, colour = temp, fill = temp))+
+  facet_wrap(~wound2, labeller = labeller(wound = c("Control" = "No Injury", "Injured" = "Injury")))+
+  geom_bar(stat="identity", position="dodge") +geom_errorbar(aes(ymin=Mean-std_err$umol.cm2.hr, ymax=Mean+std_err$umol.cm2.hr), width=0, position=position_dodge(width = 0.9))+
+    geom_text(aes(label=letter), nudge_y=0.32, color="black")+
+  geom_point(data = mean.resp, aes(x = temp, y = umol.cm2.hr, colour = temp), shape = 21, alpha = 0.7,
+             position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('black', 'black'), guide="none")+
+  scale_fill_manual(values = c('white', 'grey'), labels=c("Ambient", "Elevated"), guide = "none")+
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Temperature"))+
+  ylab(expression(paste("Respiration Rate (mg/cm2/day)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 12)
+```
+
+
+
+```{r}
+rates.filtered%>%filter(rate == "Respiration")%>%filter(timepoint == 1) -> mean.resp
+mean.resp%>%unite("treatment", wound:temp, remove = FALSE) -> mean.resp
+
+# Calculating mean growth for each group to plot.
+mean.resp%>%group_by(wound, temp)%>%summarize(Mean = mean(umol.cm2.hr, na.rm=TRUE),
+                                                        'N'=length(umol.cm2.hr ))-> mean
+
+mean.resp%>%aggregate(umol.cm2.hr ~ treatment, FUN = function(x) sd(x)/sqrt(length(x)))%>%separate(col = treatment, into = c("wound", "temp")) -> std_err
+
+# Assuming all contrasts were significant for simplicity; this may change based on actual results.
+mean$letter <- c("abc", "abc", "a","bc", "abc", "bc")
+
+dodge<-position_dodge(width=0.6) # this offsets the points so they don't overlap
+
+  ggplot(mean, aes(x = temp, y = Mean, colour = temp, fill = temp))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+  geom_bar(stat="identity", position="dodge") +geom_errorbar(aes(ymin=Mean-std_err$umol.cm2.hr, ymax=Mean+std_err$umol.cm2.hr), width=0, position=position_dodge(width = 0.9))+
+    geom_text(aes(label=letter), nudge_y=0.32, color="black")+
+  geom_point(data = mean.resp, aes(x = temp, y = umol.cm2.hr, colour = temp), shape = 21, alpha = 0.7,
+             position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('black', 'black', 'black'), guide="none")+
+  scale_fill_manual(values = c('white', 'grey'), labels=c("Ambient", "Elevated"), guide = "none")+
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Temperature"))+
+  ylab(expression(paste("Respiration Rate (mg/cm2/day)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 12)
+
+print(figure_1)
+
+#save plot
+
+ggsave("figure_1.png", plot = figure_1, path = here(),
+       width = 8,
+       height = 8,
+       units = "in")
+```
+
+
+# NET PHOTOSYNTHESIS
+Run Models: The full model includes fixed effects wound, temp, and timepoint. Percent_affected is included as a covariate. 
+```{r}
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = data2%>%filter(rate == "Net Photosynthesis"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+#reduced
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + percent_affected + (1|genotype/coral_id), data = data2%>%filter(rate == "Net Photosynthesis"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
 anova(mod, type = 3)
 
 ```
+
+Filter data to remove worm effect determined from growth data. this threshold is below 10 percent worm damage. check that percent affected is no longer significant in full model
+```{r}
+rates.filtered = subset(data2, percent_affected <= 10)
+
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Net Photosynthesis"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) #percent affected is not longer significant 
+
+#reduced
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + temp*timepoint*percent_affected + wound*temp*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Net Photosynthesis"))
+anova(mod, type = 3)
+
+#reduced again
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Net Photosynthesis"))
+anova(mod, type = 3)# percent affected not significant in reduced model
+```
+
+Run models with filtered data without percent affected as a covariate.
+```{r}
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Net Photosynthesis")%>%filter(!timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # significant 3way interaction between temp, time, and wound, also sig interaction between temp and time
+
+lsmeans(mod, pairwise~wound*temp*timepoint, adjust="tukey")
+
+```
+
+Model for Net Photosynthesis broken into each timepoint 
+```{r}
+# DAY 0
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Net Photosynthesis")%>%filter(timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+# DAY 1
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Net Photosynthesis")%>%filter(timepoint == 1), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) 
+
+# DAY 10
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Net Photosynthesis")%>%filter(timepoint == 10), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # temp is highly significant
+
+lsmeans(mod, pairwise~wound*temp, adjust="tukey")
+
+# DAY 19
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Net Photosynthesis")%>%filter(timepoint == 19), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # temp is highly significant and temp*wound interaction highly significant
+
+lsmeans(mod, pairwise~wound*temp, adjust="tukey")
+```
+
+
+```{r}
+rates.filtered%>%filter(rate == "Net Photosynthesis")%>%filter(timepoint == 10) -> mean.netphoto
+mean.netphoto%>%unite("treatment", wound:temp, remove = FALSE) -> mean.netphoto
+
+# Calculating mean growth for each group to plot.
+mean.netphoto%>%group_by(wound, temp)%>%summarize(Mean = mean(umol.cm2.hr, na.rm=TRUE),
+                                                        'N'=length(umol.cm2.hr ))-> mean
+
+mean.netphoto%>%aggregate(umol.cm2.hr ~ treatment, FUN = function(x) sd(x)/sqrt(length(x)))%>%separate(col = treatment, into = c("wound", "temp")) -> std_err
+
+# Assuming all contrasts were significant for simplicity; this may change based on actual results.
+mean$letter <- c("ac", "b", "a","abc", "abc", "b")
+
+dodge<-position_dodge(width=0.6) # this offsets the points so they don't overlap
+
+  ggplot(mean, aes(x = temp, y = Mean, colour = temp, fill = temp))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+  geom_bar(stat="identity", position="dodge") +geom_errorbar(aes(ymin=Mean-std_err$umol.cm2.hr, ymax=Mean+std_err$umol.cm2.hr), width=0, position=position_dodge(width = 0.9))+
+    geom_text(aes(label=letter), nudge_y=0.32, color="black")+
+  geom_point(data = mean.netphoto, aes(x = temp, y = umol.cm2.hr, colour = temp), shape = 21, alpha = 0.7,
+             position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('black', 'black', 'black'), guide="none")+
+  scale_fill_manual(values = c('white', 'grey'), labels=c("Ambient", "Elevated"), guide = "none")+
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Temperature"))+
+  ylab(expression(paste("Net Photosynthesis Rate (mg/cm2/day)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 12)
+
+print(figure_1)
+
+#save plot
+
+ggsave("figure_1.png", plot = figure_1, path = here(),
+       width = 8,
+       height = 8,
+       units = "in")
+```
+
+# GROSS PHOTOSYNTHESIS
+Run Models: The full model includes fixed effects wound, temp, and timepoint. Percent_affected is included as a covariate. 
+```{r}
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = data2%>%filter(rate == "Gross Photosynthesis"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+#reduced
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + percent_affected + (1|genotype/coral_id), data = data2%>%filter(rate == "Gross Photosynthesis"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+```
+
+Filter data to remove worm effect determined from growth data. this threshold is below 10 percent worm damage. check that percent affected is no longer significant in full model
+```{r}
+rates.filtered = subset(data2, percent_affected <= 10)
+
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Gross Photosynthesis"), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) #percent affected is not longer significant 
+
+#reduced
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + timepoint*percent_affected + temp*percent_affected + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Gross Photosynthesis"))
+anova(mod, type = 3)# percent affected not significant in reduced model
+```
+
+Run models with filtered data without percent affected as a covariate.
+```{r}
+#full model 
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = rates.filtered%>%filter(rate == "Gross Photosynthesis")%>%filter(!timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # timepoint is significant
+
+lsmeans(mod, pairwise~wound*temp*timepoint, adjust="tukey")
+
+```
+
+Model for Net Photosynthesis broken into each timepoint 
+```{r}
+# DAY 0
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Gross Photosynthesis")%>%filter(timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+# DAY 1
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Gross Photosynthesis")%>%filter(timepoint == 1), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) 
+
+# DAY 10
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Gross Photosynthesis")%>%filter(timepoint == 10), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # temp is highly significant
+
+lsmeans(mod, pairwise~wound*temp, adjust="tukey")
+
+# DAY 19
+mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Gross Photosynthesis")%>%filter(timepoint == 19), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3) # temp is highly significant and temp*wound interaction highly significant
+
+lsmeans(mod, pairwise~wound*temp, adjust="tukey")
+```
+
+
+```{r}
+rates.filtered%>%filter(rate == "Gross Photosynthesis")%>%filter(timepoint == 10) -> mean.grossphoto
+mean.grossphoto%>%unite("treatment", wound:temp, remove = FALSE) -> mean.grossphoto
+
+# Calculating mean growth for each group to plot.
+mean.grossphoto%>%group_by(wound, temp)%>%summarize(Mean = mean(umol.cm2.hr, na.rm=TRUE),
+                                                        'N'=length(umol.cm2.hr ))-> mean
+
+mean.grossphoto%>%aggregate(umol.cm2.hr ~ treatment, FUN = function(x) sd(x)/sqrt(length(x)))%>%separate(col = treatment, into = c("wound", "temp")) -> std_err
+
+# Assuming all contrasts were significant for simplicity; this may change based on actual results.
+#mean$letter <- c("ac", "b", "a","abc", "abc", "b")
+
+dodge<-position_dodge(width=0.6) # this offsets the points so they don't overlap
+
+  ggplot(mean, aes(x = temp, y = Mean, colour = temp, fill = temp))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+  geom_bar(stat="identity", position="dodge") +geom_errorbar(aes(ymin=Mean-std_err$umol.cm2.hr, ymax=Mean+std_err$umol.cm2.hr), width=0, position=position_dodge(width = 0.9))+
+   # geom_text(aes(label=letter), nudge_y=0.32, color="black")+
+  geom_point(data = mean.grossphoto, aes(x = temp, y = umol.cm2.hr, colour = temp), shape = 21, alpha = 0.7,
+             position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('black', 'black', 'black'), guide="none")+
+  scale_fill_manual(values = c('white', 'grey'), labels=c("Ambient", "Elevated"), guide = "none")+
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Temperature"))+
+  ylab(expression(paste("Gross Photosynthesis Rate (mg/cm2/day)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 12)
+
+print(figure_1)
+
+#save plot
+
+ggsave("figure_1.png", plot = figure_1, path = here(),
+       width = 8,
+       height = 8,
+       units = "in")
+```
+
+# plotting all rates
+```{r}
+summarySE(data = rates.filtered, measurevar = "umol.cm2.hr", groupvars = c("rate","wound", "temp"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+
+
+
+rates.filtered%>%unite("treatment", c(wound, temp, timepoint), remove = FALSE) -> all.rates
+
+# Calculating mean rate for each group to plot.
+all.rates%>%group_by(rate, wound, temp, timepoint)%>%summarize(Mean = mean(umol.cm2.hr, na.rm=TRUE),
+                                                        'N'=length(umol.cm2.hr ))-> mean
+
+all.rates%>%aggregate(umol.cm2.hr ~ treatment, FUN = function(x) sd(x)/sqrt(length(x)))%>%separate(col = treatment, into = c("wound", "temp", "timepoint")) -> std_err
+
+dodge<-position_dodge(width=0.6) # this offsets the points so they don't overlap
+
+  ggplot(mean, aes(x = timepoint, y = Mean, colour = temp, fill = temp))+
+  facet_grid(rate~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+  geom_point(stat="identity", position="dodge")+
+ scale_color_manual(values = c('blue', 'red'), labels=c("Ambient", "Elevated"))+
+  #scale_fill_manual(values = c('blue', 'red'))+
+  #scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Day"))+
+  ylab(expression(paste("umol.cm2.hr")))+
+   theme_few(base_size = 12)
+
+
+```
+
+
+```{r}
+ggplot(data = rates.filtered, aes(x = timepoint, y = umol.cm2.hr, col = temp))+
+  #geom_jitter(size = .5, alpha = .5)+
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.2)) +
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("O2 Rate (umol/cm2/hr)")+
+  xlab("Day")+
+  facet_grid(rate~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  theme_classic()+
+  labs(color = "Temperature")+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient (~28)", "Elevated (~30)"))+
+   theme_few(base_size = 20)
+```
+
