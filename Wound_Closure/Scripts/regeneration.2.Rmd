@@ -19,6 +19,7 @@ library(janitor)
 library(emmeans)
 library(plyr)
 library(ggthemes)
+library(survminer)
 #library(survMisc)
 ```
 
@@ -83,16 +84,18 @@ print(data %>% group_by(time_point, wound) %>% reframe(samp.size=n()))
 ```{r}
 
 #clean data frame for columns we want, change timepoint and healed to numeric for model
-data%>%select(coral_id, time_point, healed, wound, temp)%>%group_by(coral_id)%>%filter(lag(healed)!=1)%>%ungroup()%>%filter(healed == 1 | time_point == 19) %>% mutate(time_point = as.numeric(time_point), healed = as.character(healed), healed = as.numeric(healed))-> survival
+data%>%select(coral_id, time_point, healed, wound, temp, genotype, percent_affected)%>%group_by(coral_id)%>%filter(lag(healed)!=1)%>%ungroup()%>%filter(healed == 1 | time_point == 19) %>% mutate(time_point = as.numeric(time_point), healed = as.character(healed), healed = as.numeric(healed))-> survival
 # survfit is model function (like  a glm), surv() function to create dependent df (when the event happened (time) and what was event (event)) as a function of wound
-surv.mod<- survfit(Surv(time = time_point, event = healed)~ wound, data = survival) #can see median time to healing is lower for wound 1, but cant say that is sig bc no upper CI 
+surv.mod<- survfit(Surv(time = time_point, event = healed)~ temp, data = survival) #can see median time to healing is lower for wound 1, but cant say that is sig bc no upper CI 
 summary(survfit(Surv(time = time_point, event = healed)~ temp, data = survival))
 # put model inside autoplot() to visualize, fun = event to switch direction of healing 
-autoplot(survfit(Surv(time = time_point, event = healed)~ wound, data = survival), fun = 'event') -> p1
+autoplot(survfit(Surv(time = time_point, event = healed)~ temp, data = survival), fun = 'event') -> p1
 # cox.zph() assumption check to see if hazard ratio is changing over time (p<0.05 is bad)
-cox.zph(coxph(Surv(time_point, healed)~ wound + temp, data = survival))
+cox.zph(coxph(Surv(time_point, healed)~  temp, data = survival))
 # harard ratio, CI, and p value for wound 2 with respect to wound 1. HR<1, CI not crossing 1, p<0.05 all mean that at any point in time individuals with wound 2 have less probability to be healed 
-coxph(Surv(time_point, healed)~wound * temp, data = survival) %>% tbl_regression(exp = T)
+coxph(Surv(time_point, healed)~temp, data = survival) %>% tbl_regression(exp = T)
+
+survdiff(Surv(time_point, healed) ~ temp, data = survival) # ask about this 
 
 p1+xlab("Time (days")+ ylab("Survival (%)")+
   guides(fill="none") +
@@ -105,34 +108,163 @@ p1+xlab("Time (days")+ ylab("Survival (%)")+
 # glm
 
 ```{r}
-m1<- glm(healed ~ wound + temp, data = survival%>%filter(time_point == "10"), family = binomial)
+m1<- glm(healed ~ wound*temp*time_point, data = survival, family = binomial)
 summary(m1)
 ```
 
 # how many corals healed by the end of experiment?
 ```{r}
-view(data%>%filter(time_point == 19, wound == 1)) # 7/7 = 100% of fragmented corals
-view(data%>%filter(time_point == 19, wound == 2)) # 6/7 
+data%>%filter(time_point == 19, wound == 1) # 7/7 = 100% of fragmented corals
+data%>%filter(time_point == 19, wound == 2) # 6/7 
 ```
-
 
 ```{r}
 survival%>%unite("treatment", wound:temp, remove = FALSE) -> survival
+
+```
+
+For censored data (where the event has not occurred by the end of the study or observation period), the event status is typically represented as Surv(time, event) where event is 0 (indicating censored) or 1 (indicating the event occurred).
+For uncensored data (where the event has occurred), event is typically represented as 1.
+```{r}
+
 # survfit is model function (like  a glm), surv() function to create dependent df (when the event happened (time) and what was event (event)) as a function of wound
-surv.mod<- survfit(Surv(time = time_point, event = healed)~ treatment, data = survival) #can see median time to healing is lower for wound 1, but cant say that is sig bc no upper CI 
-summary(survfit(Surv(time = time_point, event = healed)~ treatment, data = survival))
+surv.mod<- survfit(Surv(time = time_point, event = healed) ~ wound + temp, data = survival) #can see median time to healing is lower for wound 1, but cant say that is sig bc no upper CI 
+summary(survfit(Surv(time = time_point, event = healed)~ wound + temp, data = survival))
 # put model inside autoplot() to visualize, fun = event to switch direction of healing 
-autoplot(survfit(Surv(time = time_point, event = healed)~ treatment, data = survival), fun = 'event') -> p1
+autoplot(survfit(Surv(time = time_point, event = healed) ~ wound + temp, data = survival), fun = 'event') 
 # cox.zph() assumption check to see if hazard ratio is changing over time (p<0.05 is bad)
-cox.zph(coxph(Surv(time_point, healed)~ treatment, data = survival))
+cox.zph(coxph(Surv(time_point, healed)~ wound * temp, data = survival, id = coral_id))
 # harard ratio, CI, and p value for wound 2 with respect to wound 1. HR<1, CI not crossing 1, p<0.05 all mean that at any point in time individuals with wound 2 have less probability to be healed 
-coxph(Surv(time_point, healed)~treatment, data = survival) %>% tbl_regression(exp = T)
+coxph(Surv(time_point, healed)~wound + temp, data = survival, id = coral_id) %>% tbl_regression(exp = T)
 
 p1+xlab("Time (days")+ ylab("Survival (%)")+
   guides(fill="none") +
   labs(colour = "Injury Type") +
   scale_colour_brewer(type = "qual", palette = "Dark2",
                     guide = guide_legend(keywidth = 3, keyheight = 3), labels = c("Fragmentation", "Abrasion"))+theme_classic()
+
+```
+
+```{r}
+library(coxme)
+
+coxme(Surv(time_point, healed)~wound*temp + (1|percent_affected), data = survival) %>% tbl_regression(exp = T)
+
+coxme(Surv(time_point, healed)~treatment+ (1|genotype/cora) + (1|percent_affected), data = survival) %>% tbl_regression(exp = T)
+cox.zph(coxme(Surv(time_point, healed)~treatment+ (1|percent_affected), data = survival))
+```
+
+```{r}
+
+# Plot survival curves
+ggsurvplot(surv_fit, data = survival, risk.table = TRUE, pval = TRUE, fun = "event")
+
+
+# Customizing appearance
+ggsurvplot(surv_fit, data = survival,
+          palette = c("blue", "lightblue", "darksalmon", "red"),   # Custom color palette
+           #linetype = c("solid", "dashed", "solid", "dashed"),                  # Different linetypes for groups
+           xlab = "Time", ylab = "Probability of full regeneration",  # Axis labels
+          # risk.table = "percentage", # Include risk table
+          # tables.theme = theme_cleantable(),
+           #pval = TRUE,
+           fun = "event",
+           #conf.int = TRUE,
+           legend.title = "Treatments",
+ legend.labs = c("FA", "FE", "AA", "AE"),
+ #legend = "none",
+          # surv.median.line = "v",
+          # cumevents = TRUE
+         # risk.table.title = " "
+           ) 
+
+```
+
+```{r}
+surv_fit <- survfit(Surv(time_point, healed) ~ treatment, data = survival)
+# Convert survfit object to data frame
+surv_data <- summary(surv_fit, times = c(10, 15, 19, 20))  # Specify times for risk table
+
+# Create a data frame from summary
+surv_df <- data.frame(
+  time = surv_data$time,
+  surv = surv_data$surv,
+  strata = as.factor(surv_data$strata)
+)
+
+# Define color palette and linetypes
+palette <- c("blue", "blue", "red", "red")
+linetypes <- c("solid", "dashed", "solid", "dashed")
+
+# Plot survival curves with ggplot2
+ggplot(surv_df, aes(x = time, y = surv, color = strata, linetype = strata)) +
+  geom_step(size = 1.5) +
+  scale_color_manual(values = palette) +
+  scale_linetype_manual(values = linetypes) +
+  labs(title = "Survival Curves by Treatment", x = "Time", y = "Survival Probability") +
+  theme_minimal()
+```
+
+
+
+# using treatment
+```{r}
+#make wound and temp factors
+survival$treatment <- as.factor(survival$treatment)
+# create survival object with time and healed data
+surv_object <- Surv(time = survival$time_point, event = survival$healed)
+# fit survival model
+surv.mod <- survfit(surv_object~treatment, data = survival)
+# confirm results of survival model with cox model
+cox_model <- coxph(surv_object ~ treatment, data = survival)
+# results of cox model
+summary(cox_model)
+# make sure hazard ratio is not changing over time (P>0.5)
+cox.zph(cox_model)
+# make table of cox results
+coxph(surv_object ~ treatment, data = survival) %>% tbl_regression(exp = T)
+
+
+```
+Penalized regression techniques can handle perfect separation by adding a penalty to the model fitting process. Ridge regression and the Lasso (Least Absolute Shrinkage and Selection Operator) are common choices.
+```{r}
+
+library(glmnet)
+
+# Prepare the data for glmnet
+# glmnet expects the predictors as a matrix and the response as a survival object
+x <- model.matrix(healed ~wound * temp, data = survival)[, -1]  # remove the intercept
+y <- Surv(survival$time_point, survival$healed)
+
+# Fit the penalized Cox model using glmnet
+cox_penalized <- glmnet(x, y, family = "cox", alpha = 1)  # alpha = 0 for Ridge, alpha = 1 for Lasso
+print(cox_penalized)
+
+#To find the best lambda, use cross-validation
+cv_fit <- cv.glmnet(x, y, family = "cox", alpha = 1)
+plot(cv_fit)
+
+# The lambda that gives the minimum mean cross-validated error
+best_lambda <- cv_fit$lambda.min
+print(best_lambda)
+
+# Fit the final model with the best lambda
+cox_lasso_best <- glmnet(x, y, family = "cox", alpha = 1, lambda = best_lambda)
+print(cox_lasso_best)
+
+
+# Extract the coefficients for the model with the best lambda
+lasso_coefficients <- coef(cox_lasso_best)
+print(lasso_coefficients)
+
+# Convert the coefficients to a data frame and display non-zero coefficients
+lasso_coefficients_df <- as.data.frame(as.matrix(lasso_coefficients))
+lasso_coefficients_df <- lasso_coefficients_df[lasso_coefficients_df$s1 != 0, , drop = FALSE]
+print(lasso_coefficients_df)
+
+# Predict risk scores for each observation
+risk_scores <- predict(cox_lasso_best, newx = x, type = "link")
+print(risk_scores)
 
 ```
 

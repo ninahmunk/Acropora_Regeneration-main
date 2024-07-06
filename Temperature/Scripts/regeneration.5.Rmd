@@ -1,0 +1,364 @@
+---
+title: "Regeneration.5"
+author: "Ninah Munk"
+date: "2024-06-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggfortify)
+library(survival)
+library(gtsummary)
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
+library(tidyverse)
+library(janitor)
+library(emmeans)
+library(plyr)
+library(ggthemes)
+library(survminer)
+library(coxme)
+```
+
+
+# Load data and combine 
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/healing.signs.data.ninah.csv")%>%select(-wound) -> regen
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")-> samp.info
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv") -> SA
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")%>%select(coral_id, affected, percent_affected)-> worm
+
+regen%>%left_join(samp.info, by = "coral_id")%>%left_join(SA, by = "coral_id")%>%left_join(worm, by = "coral_id") -> data
+
+```
+
+
+# modify data set 
+```{r}
+
+data%>%mutate(polyp = as.factor(polyp), 
+               corallite = as.factor(corallite),
+               new_tissue = as.factor(new_tissue),
+               healed.full = as.factor(healed.full),
+               healed.2.3 = as.factor(healed.2.3),
+               wound = as.factor(wound),
+               temp = as.factor(temp),
+               genotype = as.factor(genotype))-> data2
+```
+
+# Clean Data
+```{r}
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
+data2 <- data2[!(data$coral_id %in% corals_to_remove), ]
+```
+
+
+# using polyp as event. Here I am running mixed effects cox models with percent affected as a covariate
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data2%>%select(coral_id, time, polyp, wound, temp, genotype, percent_affected)%>%group_by(coral_id)%>%filter(lag(polyp)!=1)%>%ungroup()%>%filter(polyp == 1 | time == 19) %>% mutate(time = as.numeric(time), polyp = as.character(polyp), polyp = as.numeric(polyp))%>%unite("treatment", wound:temp, remove = FALSE)-> survival
+
+cox.zph(coxme(Surv(time, polyp)~wound*temp*percent_affected + (1|genotype), data = survival))
+coxme(Surv(time, polyp)~wound*temp*percent_affected + (1|genotype), data = survival)
+coxme(Surv(time, polyp)~wound*temp*percent_affected + (1|genotype), data = survival) %>% tbl_regression(exp = T) 
+
+cox.zph(coxme(Surv(time, polyp)~treatment*percent_affected + (1|genotype), data = survival))
+coxme(Surv(time, polyp)~treatment*percent_affected+ (1|genotype), data = survival)
+coxme(Surv(time, polyp)~treatment*percent_affected + (1|genotype), data = survival) %>% tbl_regression(exp =T)
+
+```
+
+# using corallite as event with percent affected as random effect
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data2 %>% select(coral_id, time, corallite, wound, temp, genotype, percent_affected)%>%group_by(coral_id) %>% filter(lag(corallite)!=1)%>%ungroup()%>%filter(corallite == 1 | time == 19) %>% mutate(time = as.numeric(time), corallite = as.character(corallite), corallite = as.numeric(corallite))%>%unite("treatment", wound:temp, remove = FALSE) -> survival
+
+cox.zph(coxme(Surv(time, corallite)~wound*temp + (1|genotype) + (1|percent_affected), data = survival))
+coxme(Surv(time, corallite)~wound*temp + (1|genotype) + (1|percent_affected), data = survival)
+coxme(Surv(time, corallite)~wound*temp + (1|genotype), data = survival) %>% tbl_regression(exp = T)
+
+cox.zph(coxme(Surv(time, corallite)~treatment + (1|genotype) + (1|percent_affected), data = survival))
+coxme(Surv(time, corallite)~treatment+ (1|genotype) + (1|percent_affected), data = survival)
+coxme(Surv(time, corallite)~treatment + (1|genotype) + (1|percent_affected), data = survival) %>% tbl_regression(exp =T)
+```
+
+# using new tissue as event with percent affected as covariate
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data2%>%select(coral_id, time, new_tissue, wound, temp, genotype, percent_affected)%>%group_by(coral_id)%>%filter(lag(new_tissue)!=1)%>%ungroup()%>%filter(new_tissue == 1 | time == 19) %>% mutate(time = as.numeric(time), new_tissue = as.character(new_tissue), new_tissue = as.numeric(new_tissue))%>%unite("treatment", wound:temp, remove = FALSE)-> survival
+
+cox.zph(coxme(Surv(time, new_tissue)~wound*temp*percent_affected + (1|genotype) , data = survival))
+coxme(Surv(time, new_tissue)~wound*temp*percent_affected + (1|genotype), data = survival)
+coxme(Surv(time, new_tissue)~wound*temp + (1|genotype), data = survival) #reduced
+coxme(Surv(time, new_tissue)~wound*temp + (1|genotype) + (1|percent_affected), data = survival) %>% tbl_regression(exp = T)
+
+cox.zph(coxme(Surv(time, new_tissue)~treatment + (1|genotype) + (1|percent_affected), data = survival))
+coxme(Surv(time, new_tissue)~treatment+ (1|genotype) + (1|percent_affected), data = survival)
+coxme(Surv(time, new_tissue)~treatment + (1|genotype) + (1|percent_affected), data = survival) %>% tbl_regression(exp =T)
+```
+
+#  having 2 out of 3 healing metrics as an event
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data2%>%select(coral_id, time, healed.2.3, wound, temp, genotype, percent_affected)%>%group_by(coral_id)%>%filter(lag(healed.2.3)!=1)%>%ungroup()%>%filter(healed.2.3 == 1 | time == 19) %>% mutate(time = as.numeric(time), healed.2.3 = as.character(healed.2.3), healed.2.3 = as.numeric(healed.2.3))%>%unite("treatment", wound:temp, remove = FALSE)-> survival
+
+cox.zph(coxme(Surv(time, healed.2.3)~wound*temp + (1|genotype) + (1|percent_affected), data = survival))
+coxme(Surv(time, healed.2.3)~wound*temp + (1|genotype) + (1|percent_affected), data = survival)
+coxme(Surv(time, healed.2.3)~wound*temp + (1|genotype) + (1|percent_affected), data = survival) %>% tbl_regression(exp = T)
+
+cox.zph(coxme(Surv(time, healed.2.3)~treatment + (1|genotype) + (1|percent_affected), data = survival))
+coxme(Surv(time, healed.2.3)~treatment+ (1|genotype) + (1|percent_affected), data = survival)
+coxme(Surv(time, healed.2.3)~treatment + (1|genotype) + (1|percent_affected), data = survival) %>% tbl_regression(exp =T)
+```
+
+
+
+# FILTERING DATA TO REMOVE WORM EFFECT
+Here I filter the data to use only the corals that had low worm damage. This threshold is <= 10% worm damage and was determined using the growth rate dataset. The remaining sample size is N = 16
+```{r}
+data3 = subset(data2, percent_affected <= 10)
+```
+
+# 2 out of 3 healing metrics as event with filtered data
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data3 %>% select(coral_id, time, healed.2.3, wound, temp, genotype, percent_affected)%>%group_by(coral_id) %>% filter(lag(healed.2.3)!=1)%>%ungroup()%>%filter(healed.2.3 == 1 | time == 19) %>% mutate(time = as.numeric(time), healed.2.3 = as.character(healed.2.3), healed.2.3 = as.numeric(healed.2.3))%>%unite("treatment", wound:temp, remove = FALSE) -> survival
+
+cox.zph(coxme(Surv(time, healed.2.3)~wound*temp + (1|genotype) , data = survival))
+coxme(Surv(time, healed.2.3)~wound*temp + (1|genotype) , data = survival)
+coxme(Surv(time, healed.2.3)~wound*temp + (1|genotype), data = survival) %>% tbl_regression(exp = T)
+
+cox.zph(coxme(Surv(time, healed.2.3)~treatment + (1|genotype), data = survival))
+coxme(Surv(time, healed.2.3)~treatment+ (1|genotype), data = survival)
+coxme(Surv(time, healed.2.3)~treatment + (1|genotype), data = survival) %>% tbl_regression(exp =T)
+
+
+```
+
+# polyp as event with filtered data
+Polyp development is the same between treatments
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data3 %>% select(coral_id, time, polyp, wound, temp, genotype, percent_affected)%>%group_by(coral_id) %>% filter(lag(polyp)!=1)%>%ungroup()%>%filter(polyp == 1 | time == 19) %>% mutate(time = as.numeric(time), polyp = as.character(polyp), polyp = as.numeric(polyp))%>%unite("treatment", wound:temp, remove = FALSE) -> survival
+
+cox.zph(coxme(Surv(time, polyp)~wound*temp + (1|genotype) , data = survival))
+coxme(Surv(time, polyp)~wound*temp + (1|genotype) , data = survival)
+coxme(Surv(time, polyp)~wound*temp + (1|genotype), data = survival) %>% tbl_regression(exp = T)
+
+cox.zph(coxme(Surv(time, polyp)~treatment + (1|genotype), data = survival))
+coxme(Surv(time, polyp)~treatment+ (1|genotype), data = survival)
+coxme(Surv(time, polyp)~treatment + (1|genotype), data = survival) %>% tbl_regression(exp =T)
+```
+# corallite as event with filtered data
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data3 %>% select(coral_id, time, corallite, wound, temp, genotype, percent_affected)%>%group_by(coral_id) %>% filter(lag(corallite)!=1)%>%ungroup()%>%filter(corallite == 1 | time == 19) %>% mutate(time = as.numeric(time), corallite = as.character(corallite), corallite = as.numeric(corallite))%>%unite("treatment", wound:temp, remove = FALSE) -> survival
+
+cox.zph(coxme(Surv(time, corallite)~wound*temp + (1|genotype) , data = survival))
+coxme(Surv(time, corallite)~wound*temp + (1|genotype) , data = survival)
+coxme(Surv(time, corallite)~wound*temp + (1|genotype), data = survival) %>% tbl_regression(exp = T)
+
+cox.zph(coxme(Surv(time, corallite)~treatment + (1|genotype), data = survival))
+coxme(Surv(time, corallite)~treatment+ (1|genotype), data = survival)
+coxme(Surv(time, corallite)~treatment + (1|genotype), data = survival) %>% tbl_regression(exp =T)
+```
+# using new tissue as event with filtered data
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data3%>%select(coral_id, time, new_tissue, wound, temp, genotype, percent_affected)%>%group_by(coral_id)%>%filter(lag(new_tissue)!=1)%>%ungroup()%>%filter(new_tissue == 1 | time == 19) %>% mutate(time = as.numeric(time), new_tissue = as.character(new_tissue), new_tissue = as.numeric(new_tissue))%>%unite("treatment", wound:temp, remove = FALSE)-> survival
+
+cox.zph(coxme(Surv(time, new_tissue)~wound*temp + (1|genotype) , data = survival))
+coxme(Surv(time, new_tissue)~wound*temp + (1|genotype), data = survival)
+coxme(Surv(time, new_tissue)~wound*temp + (1|genotype) , data = survival) %>% tbl_regression(exp = T)
+
+cox.zph(coxme(Surv(time, new_tissue)~treatment + (1|genotype) , data = survival))
+coxme(Surv(time, new_tissue)~treatment+ (1|genotype) , data = survival)
+coxme(Surv(time, new_tissue)~treatment + (1|genotype) , data = survival) %>% tbl_regression(exp =T)
+```
+
+# new column representing polyp and new tissue 
+```{r}
+data4 <- data3 %>%
+  mutate(polyp.tissue=case_when(
+    polyp=="1" & new_tissue=="1" ~ "1",
+    polyp=="0" & new_tissue=="0" ~ "0",
+    polyp=="1" & new_tissue=="0" ~ "0",
+    polyp=="0" & new_tissue=="1" ~ "0"
+  ))
+```
+
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data4%>%select(coral_id, time, polyp.tissue, wound, temp, genotype, percent_affected)%>%group_by(coral_id)%>%filter(lag(polyp.tissue)!=1)%>%ungroup()%>%filter(polyp.tissue == 1 | time == 19) %>% mutate(time = as.numeric(time), polyp.tissue = as.character(polyp.tissue), polyp.tissue = as.numeric(polyp.tissue))%>%unite("treatment", wound:temp, remove = FALSE)-> survival
+
+cox.zph(coxme(Surv(time, polyp.tissue)~wound*temp + (1|genotype) , data = survival))
+coxme(Surv(time, polyp.tissue)~wound*temp + (1|genotype), data = survival)
+coxme(Surv(time, polyp.tissue)~wound*temp + (1|genotype) , data = survival) %>% tbl_regression(exp = T)
+
+cox.zph(coxme(Surv(time, polyp.tissue)~treatment + (1|genotype) , data = survival))
+coxme(Surv(time, polyp.tissue)~treatment+ (1|genotype) , data = survival)
+coxme(Surv(time, polyp.tissue)~treatment + (1|genotype) , data = survival) %>% tbl_regression(exp =T)
+```
+
+
+```{r}
+data5 <- data3 %>%
+  mutate(corallite.tissue=case_when(
+    corallite=="1" & new_tissue=="1" ~ "1",
+    corallite=="0" & new_tissue=="0" ~ "0",
+    corallite=="1" & new_tissue=="0" ~ "0",
+    corallite=="0" & new_tissue=="1" ~ "0"
+  ))
+
+```
+
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data5%>%select(coral_id, time, corallite.tissue, wound, temp, genotype, percent_affected)%>%group_by(coral_id)%>%filter(lag(corallite.tissue)!=1)%>%ungroup()%>%filter(corallite.tissue == 1 | time == 19) %>% mutate(time = as.numeric(time), corallite.tissue = as.character(corallite.tissue), corallite.tissue = as.numeric(corallite.tissue))%>%unite("treatment", wound:temp, remove = FALSE)-> survival
+
+cox.zph(coxme(Surv(time, corallite.tissue)~wound*temp + (1|genotype) , data = survival))
+coxme(Surv(time, corallite.tissue)~wound*temp + (1|genotype), data = survival)
+coxme(Surv(time, corallite.tissue)~wound*temp + (1|genotype) , data = survival) %>% tbl_regression(exp = T)
+
+cox.zph(coxme(Surv(time, polyp.tissue)~treatment + (1|genotype) , data = survival))
+coxme(Surv(time, polyp.tissue)~treatment+ (1|genotype) , data = survival)
+coxme(Surv(time, polyp.tissue)~treatment + (1|genotype) , data = survival) %>% tbl_regression(exp =T)
+```
+```{r}
+data3 = subset(data2, percent_affected <= 10)
+```
+
+```{r}
+data3%>%select(coral_id,time, polyp, genotype, wound, temp)%>%group_by(coral_id)%>%filter(lag(polyp)!=1)%>%ungroup()%>%filter(polyp == 1 | time == 19)%>%mutate(event = "polyp")%>%rename(status = polyp) -> polyp
+data3%>%select(coral_id,time, corallite, genotype, wound, temp)%>%group_by(coral_id)%>%filter(lag(corallite)!=1)%>%ungroup()%>%filter(corallite == 1 | time == 19)%>%mutate(event = "corallite")%>%rename(status = corallite)  -> corallite
+data3%>%select(coral_id,time, new_tissue, genotype, wound, temp)%>%group_by(coral_id)%>%filter(lag(new_tissue)!=1)%>%ungroup()%>%filter(new_tissue == 1 | time == 19)%>%mutate(event = "new_tissue")%>%rename(status = new_tissue)  -> new_tissue
+
+rbind(polyp, corallite, new_tissue)-> full
+
+full%>%mutate(time = as.numeric(time), status = as.character(status), status = as.numeric(status))%>%unite("treatment", wound:temp, remove = FALSE)-> data6
+
+# Convert the event variable to a factor
+data6$event <- factor(data6$event)
+
+cox.zph(coxph(Surv(time, status) ~ wound * temp , data = data6%>%filter(event == "polyp"), id = coral_id))
+fit <- coxph(Surv(time, status) ~ wound * temp , data = data6%>%filter(event == "polyp"), id = coral_id)
+summary(fit)
+coxph(Surv(time, status) ~ wound * temp , data = data6%>%filter(event == "polyp"), id = coral_id)%>% tbl_regression(exp =T)
+
+cox.zph(coxph(Surv(time, status) ~ wound * temp , data = data6%>%filter(event == "corallite"), id = coral_id))
+fit <- coxph(Surv(time, status) ~ wound * temp , data = data6%>%filter(event == "corallite"), id = coral_id)
+summary(fit)
+coxph(Surv(time, status) ~ wound * temp , data = data6%>%filter(event == "corallite"), id = coral_id)%>% tbl_regression(exp =T)
+
+cox.zph(coxph(Surv(time, status) ~ wound * temp , data = data6%>%filter(event == "new_tissue"), id = coral_id))
+fit <- coxph(Surv(time, status) ~ wound * temp, data = data6%>%filter(event == "new_tissue"), id = coral_id)
+summary(fit)
+coxph(Surv(time, status) ~ wound * temp , data = data6%>%filter(event == "new_tissue"), id = coral_id)%>% tbl_regression(exp =T)
+
+
+```
+
+```{r}
+# survfit is model function (like  a glm), surv() function to create dependent df (when the event happened (time) and what was event (event)) as a function of wound
+
+survfit(Surv(time, status) ~ wound + temp , data = data6%>%filter(event == "polyp"))
+surv.mod <- survfit(Surv(time, status) ~ wound + temp , data = data6%>%filter(event == "polyp"))
+summary(surv.mod)
+
+survfit(Surv(time, status) ~ wound + temp , data = data6%>%filter(event == "corallite"))
+surv.mod <- survfit(Surv(time, status) ~ wound + temp , data = data6%>%filter(event == "corallite"))
+summary(surv.mod)
+
+survfit(Surv(time, status) ~ wound + temp , data = data6%>%filter(event == "new_tissue"))
+surv.mod <- survfit(Surv(time, status) ~ wound + temp , data = data6%>%filter(event == "new_tissue"))
+summary(surv.mod)
+
+
+```
+
+
+```{r}
+library(survival)
+library(survminer)
+
+# Fit survival models for each event type
+polyp_mod <- survfit(Surv(time, status) ~ wound + temp, data = data6 %>% filter(event == "polyp"))
+corallite_mod <- survfit(Surv(time, status) ~ wound + temp, data = data6 %>% filter(event == "corallite"))
+new_tissue_mod <- survfit(Surv(time, status) ~ wound + temp, data = data6 %>% filter(event == "new_tissue"))
+
+# Plot survival curves
+ggsurvplot(polyp_mod, data = data6 %>% filter(event == "polyp"), 
+                         pval = TRUE, title = "Survival Curves for Polyp",
+                         legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top")
+
+
+ ggsurvplot(corallite_mod, data = data6 %>% filter(event == "corallite"), 
+                             pval = TRUE, title = "Survival Curves for Corallite",
+             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top")
+
+
+ ggsurvplot(new_tissue_mod, data = data6 %>% filter(event == "new_tissue"), 
+                              pval = TRUE, title = "Survival Curves for New Tissue",
+             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top")
+
+
+```
+
+```{r}
+polyp_mod <- survfit(Surv(time, status) ~ wound + temp, data = data6 %>% filter(event == "polyp"))
+
+ggsurvplot(
+   polyp_mod,                     # survfit object with calculated statistics.
+   data = data6%>% filter(event == "polyp"),             # data used to fit survival curves.
+   risk.table = TRUE,       # show risk table.
+   conf.int = TRUE,         # show confidence intervals for 
+                            # point estimates of survival curves.
+                            # survival estimates.
+   xlab = "Time in days",   # customize X axis label
+   ggtheme = theme_light(), # customize plot and risk table with a theme.
+ risk.table.y.text.col = T, # colour risk table text annotations.
+  risk.table.y.text = FALSE, # show bars instead of names in text annotations
+             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top"
+                            # in legend of risk table
+)
+
+corallite_mod <- survfit(Surv(time, status) ~ wound + temp, data = data6 %>% filter(event == "corallite"))
+
+ggsurvplot(
+   corallite_mod,                     # survfit object with calculated statistics.
+   data = data6%>% filter(event == "corallite"),             # data used to fit survival curves.
+   risk.table = TRUE,       # show risk table.
+   conf.int = TRUE,         # show confidence intervals for 
+                            # point estimates of survival curves.
+                            # survival estimates.
+   xlab = "Time in days",   # customize X axis label
+   ggtheme = theme_light(), # customize plot and risk table with a theme.
+ risk.table.y.text.col = T, # colour risk table text annotations.
+  risk.table.y.text = FALSE, # show bars instead of names in text annotations
+             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top"
+                            # in legend of risk table
+)
+
+new_tissue_mod <- survfit(Surv(time, status) ~ wound + temp, data = data6 %>% filter(event == "new_tissue"))
+
+ggsurvplot(
+   new_tissue_mod,                     # survfit object with calculated statistics.
+   data = data6%>% filter(event == "new_tissue"),             # data used to fit survival curves.
+   risk.table = TRUE,       # show risk table.
+   conf.int = TRUE,         # show confidence intervals for 
+                            # point estimates of survival curves.
+                            # survival estimates.
+   xlab = "Time in days",   # customize X axis label
+   ggtheme = theme_light(), # customize plot and risk table with a theme.
+ risk.table.y.text.col = T, # colour risk table text annotations.
+  risk.table.y.text = FALSE, # show bars instead of names in text annotations
+             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top"
+                            # in legend of risk table
+)
+
+```
+

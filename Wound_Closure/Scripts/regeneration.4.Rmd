@@ -1,0 +1,65 @@
+---
+title: "wound closure frag only"
+author: "Ninah Munk"
+date: "2024-06-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(janitor)
+library(stringr)
+library(lme4)
+library(emmeans)
+library(car)
+library(ggpubr)
+library(rstatix)
+library(lmerTest)
+```
+
+```{r}
+data<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/fragment.only.measurements.csv")%>%clean_names()
+samp.info<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")%>%select(coral_id, affected, percent_affected)-> worm
+```
+
+
+```{r}
+
+
+data%>%select(-notes)%>%mutate(P.A = (perimeter / area_mm2))%>%mutate(time_point_initial = case_when(time_point_initial == "initial" ~ 0,
+                                     time_point_initial == "24hr" ~ 1,
+                                     time_point_initial == "day10" ~ 10,
+                                     time_point_initial == "final" ~ 19))-> data
+
+
+
+
+```
+
+
+```{r}
+
+data%>%left_join(samp.info, by = "coral_id")%>%left_join(worm, by = "coral_id") -> data1
+
+data1%>%mutate(wound = as.factor(wound),
+               genotype = as.factor(genotype),
+               temp = as.factor(temp))-> data1
+```
+
+
+```{r}
+data2 = subset(data1, percent_affected <= 10)
+```
+
+
+```{r}
+mod<- lmer(area_mm2 ~ temp*time_point_initial + (1|genotype/coral_id), data = data2)
+
+anova(mod)
+
+ggplot(data = data2, aes(x = time_point_initial, y = area_mm2))+ geom_smooth(method = "lm")
+           
+```
+

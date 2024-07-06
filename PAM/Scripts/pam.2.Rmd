@@ -1,0 +1,211 @@
+---
+title: "FvFm analysis + figures"
+author: "Ninah Munk"
+date: "2024-06-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
+library(tidyverse)
+library(janitor)
+library(emmeans)
+library(plyr)
+library(ggthemes)
+library(here)
+library(pbkrtest)
+library(sjPlot)
+library(knitr)
+library(kableExtra)
+library(readxl)
+```
+# load initial data
+```{r}
+#load initial PAM datasheet 
+initial<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/PAM/Data/20230601_initial.xlsx", sheet= "20230601")%>%clean_names()%>%
+  select(c(date,genotype, id, f0,fm,fv_fm))%>%
+  rename("coral_id" = "id")
+
+#use aggregate function to find the mean of values in other column(s) (f0, fm, fv/fm) based on factor levels in coral_id column 
+initial_mean<-aggregate(.~coral_id, data = initial, mean)%>%mutate(timepoint = "initial")%>%select(-genotype)
+```
+
+
+# load day 10 data
+```{r}
+
+#load day 10 PAM datasheets - now separated by groups/date bc of how data was collected
+day10_g1<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/PAM/Data/day10_PAM.xlsx", sheet= "20230622")%>%clean_names()%>%
+  select(c(date, coral_id, f0,fm,fv_fm))
+
+
+day10_g2<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/PAM/Data/day10_PAM.xlsx", sheet= "20230623")%>%clean_names()%>%
+  select(c(date, coral_id, f0,fm,fv_fm))
+
+
+day10_g3<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/PAM/Data/day10_PAM.xlsx", sheet= "20230624")%>%clean_names()%>%
+  select(c(date, coral_id, f0,fm,fv_fm))%>%
+  fill(coral_id) #Fills missing values in selected columns using the next or previous entry. This is useful in the common output format where values are not repeated, and are only recorded when they change
+
+
+```
+
+# bind day 10 data
+```{r}
+#bind three dataframes with data from day 10 timepoint together - append 'add' rows
+day10_bind <- bind_rows(day10_g1, day10_g2, day10_g3)
+
+#get mean values of (f0, fm, fv/fm) for each coral id 
+day10_mean<-aggregate(.~coral_id,data=day10_bind,mean)%>%mutate(timepoint = "day10")
+
+```
+
+# load final data
+```{r}
+final<- read_xlsx("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/PAM/Data/final_PAM.xlsx", sheet = "Sheet1")%>%clean_names()%>%
+  select(c(date, coral_id, f0,fm,fv_fm))
+final_mean<-aggregate(.~coral_id, data = final, mean)%>%mutate(timepoint = "final")
+```
+
+
+# combine data, load sample info, edit dataframe
+```{r}
+all.data<- rbind(initial_mean, day10_mean, final_mean)
+
+samp.info<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")
+
+full.data<- left_join(all.data, samp.info, by = "coral_id")
+
+full.data<- full.data%>%mutate(wound = as.factor(wound))%>%
+  mutate(genotype = as.factor(genotype))%>%
+  mutate(temp = as.factor(temp))%>%
+  mutate(timepoint = case_when(timepoint == "initial" ~ "0",
+                               timepoint == "day10" ~ "10",
+                               timepoint == "final" ~ "19"))
+
+full.data$timepoint<- as.numeric(full.data$timepoint)
+full.data$genotype <- factor(full.data$genotype)
+full.data$temp <- factor(full.data$temp)
+
+```
+
+
+# Clean Data
+```{r}
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
+data <- full.data[!(full.data$coral_id %in% corals_to_remove), ]
+```
+
+#worms
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")%>%select(coral_id, percent_affected)-> worm
+
+data%>%left_join(worm, by = "coral_id")-> data
+```
+
+
+```{r}
+#full model 
+mod<- lmer(fv_fm ~ wound*temp*timepoint*percent_affected + (1|genotype/coral_id), data = data, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+```
+
+```{r}
+data.filtered = subset(data, percent_affected <= 10)
+
+mod<- lmer(fv_fm ~ wound*temp*timepoint + (1|genotype/coral_id), data = data.filtered%>%filter(!timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+mod<- lmer(fv_fm ~ wound*temp*as.factor(timepoint) + (1|genotype/coral_id), data = data.filtered%>%filter(!timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+# Day 0
+mod<- lmer(fv_fm ~ wound*temp + (1|genotype), data = data.filtered%>%filter(timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+# Day 10
+mod<- lmer(fv_fm ~ wound*temp + (1|genotype), data = data.filtered%>%filter(timepoint == 10), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+# Day 19
+mod<- lmer(fv_fm ~ wound*temp + (1|genotype), data = data.filtered%>%filter(timepoint == 19), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+emmeans(mod, pairwise ~ temp*wound)
+lsmeans(mod, pairwise~wound*temp, adjust="tukey")
+```
+# figure based on model: temp*timepoint significant 
+```{r}
+
+mod<- lmer(fv_fm ~ wound*temp*timepoint + (1|genotype/coral_id), data = data.filtered, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+anova(mod, type = 3)
+
+ggplot(data = data.filtered, aes(x = timepoint, y = fv_fm, col = temp))+geom_smooth(method = "lm")+
+  #geom_jitter(size = .5, alpha = .5)+
+  #stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.2)) +
+  #stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  #stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("Photosynthetic Efficiency (Fv/Fm)")+
+  xlab("Day")+
+  #facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  theme_classic()+
+  labs(color = "Temperature")+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient (~28)", "Elevated (~30)"))+
+   theme_few(base_size = 15) -> fvfm
+
+ggsave("fvfm.png", plot = fvfm, path = here(),
+       width = 10,
+       height = 8,
+       units = "in")
+```
+
+
+
+#figure
+```{r}
+ggplot(data = data.filtered, aes(x = timepoint, y = fv_fm, col = temp))+geom_smooth(method = "lm")+
+  #geom_jitter(size = .5, alpha = .5)+
+  #stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.2)) +
+  #stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  #stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("Photosynthetic Efficiency (Fv/Fm)")+
+  xlab("Day")+
+  facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  theme_classic()+
+  labs(color = "Temperature")+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient (~28)", "Elevated (~30)"))+
+   theme_few(base_size = 20)
+
+ggplot(data = data.filtered%>%filter(!timepoint == 0), aes(x = timepoint, y = fv_fm, col = temp))+geom_smooth(method = "lm")+
+  #geom_jitter(size = .5, alpha = .5)+
+  #stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.2)) +
+  #stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  #stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("Photosynthetic Efficiency (Fv/Fm)")+
+  xlab("Day")+
+  facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  theme_classic()+
+  labs(color = "Temperature")+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient (~28)", "Elevated (~30)"))+
+   theme_few(base_size = 20)
+```
+
+```{r}
+ggplot(data = data.filtered%>%filter(!timepoint ==0), aes(x = as.factor(timepoint), y = fv_fm, col = temp))+
+  #geom_jitter(size = .5, alpha = .5)+
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.2)) +
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
+  #stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
+  ylab("Photosynthetic Efficiency (Fv/Fm)")+
+  xlab("Day")+
+  facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  theme_classic()+
+  labs(color = "Temperature")+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient (~28)", "Elevated (~30)"))+
+   theme_few(base_size = 20)
+```
+
+

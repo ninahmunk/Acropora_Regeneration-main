@@ -1,0 +1,197 @@
+---
+title: "Regeneration 6"
+author: "Ninah Munk"
+date: "2024-07-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggfortify)
+library(survival)
+library(gtsummary)
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
+library(tidyverse)
+library(janitor)
+library(emmeans)
+library(plyr)
+library(ggthemes)
+library(survminer)
+library(coxme)
+```
+
+
+# Load data and combine 
+```{r}
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/healing.signs.data.ninah.csv")%>%select(-wound) -> regen
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Data/samp_info.csv")-> samp.info
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Surface_Area/Output/post_wound_surface_areas.csv") -> SA
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")%>%select(coral_id, affected, percent_affected)-> worm
+
+regen%>%left_join(samp.info, by = "coral_id")%>%left_join(SA, by = "coral_id")%>%left_join(worm, by = "coral_id") -> data
+
+```
+
+
+# modify data set 
+```{r}
+
+data%>%mutate(polyp = as.factor(polyp), 
+               corallite = as.factor(corallite),
+               new_tissue = as.factor(new_tissue),
+               healed.full = as.factor(healed.full),
+               healed.2.3 = as.factor(healed.2.3),
+               wound = as.factor(wound),
+               temp = as.factor(temp),
+               genotype = as.factor(genotype))-> data2
+```
+
+# Clean Data
+```{r}
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
+data2 <- data2[!(data$coral_id %in% corals_to_remove), ]
+```
+
+
+# FILTERING DATA TO REMOVE WORM EFFECT
+Here I filter the data to use only the corals that had low worm damage. This threshold is <= 10% worm damage and was determined using the growth rate dataset. The remaining sample size is N = 16
+```{r}
+data3 = subset(data2, percent_affected <= 10)
+
+print(data3 %>% group_by(coral_id) %>% reframe(samp.size=n()))
+```
+
+# POLYP
+survival dataframe
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data3 %>% select(coral_id, time, polyp, wound, temp, genotype, percent_affected)%>%group_by(coral_id) %>% filter(lag(polyp)!=1)%>%ungroup()%>%filter(polyp == 1 | time == 19) %>% mutate(time = as.numeric(time), polyp = as.character(polyp), polyp = as.numeric(polyp))%>%unite("treatment", wound:temp, remove = FALSE) -> polyp.survival
+```
+survival curve
+```{r}
+survfit(Surv(time, polyp) ~ wound + temp , data = polyp.survival)
+surv.mod <- survfit(Surv(time, polyp) ~ wound + temp , data = polyp.survival)
+summary(surv.mod)
+```
+cox model (mixed effects model with genotype as random effect)
+```{r}
+cox.zph(coxme(Surv(time, polyp)~wound*temp + (1|genotype) , data = polyp.survival))
+coxme(Surv(time, polyp)~wound*temp + (1|genotype) , data = polyp.survival)
+coxme(Surv(time, polyp)~wound*temp + (1|genotype), data = polyp.survival) %>% tbl_regression(exp = T)
+```
+using treatment
+```{r}
+cox.zph(coxme(Surv(time, polyp)~treatment + (1|genotype) , data = polyp.survival))
+coxme(Surv(time, polyp)~treatment + (1|genotype) , data = polyp.survival)
+coxme(Surv(time, polyp)~treatment + (1|genotype), data = polyp.survival) %>% tbl_regression(exp = T)
+```
+survival figure
+```{r}
+ggsurvplot(
+   surv.mod,                     # survfit object with calculated statistics.
+   data = polyp.survival,             # data used to fit survival curves.
+   risk.table = TRUE,       # show risk table.
+   conf.int = TRUE,         # show confidence intervals for 
+                            # point estimates of survival curves.
+                            # survival estimates.
+   xlab = "Time in days",   # customize X axis label
+   ggtheme = theme_light(), # customize plot and risk table with a theme.
+ risk.table.y.text.col = T, # colour risk table text annotations.
+  risk.table.y.text = FALSE, # show bars instead of names in text annotations
+             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top"
+                            # in legend of risk table
+)
+
+```
+
+# CORALLITE
+survival dataframe
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data3 %>% select(coral_id, time, corallite, wound, temp, genotype, percent_affected)%>%group_by(coral_id) %>% filter(lag(corallite)!=1)%>%ungroup()%>%filter(corallite == 1 | time == 19) %>% mutate(time = as.numeric(time), corallite = as.character(corallite), corallite = as.numeric(corallite))%>%unite("treatment", wound:temp, remove = FALSE) -> corallite.survival
+```
+survival curve
+```{r}
+survfit(Surv(time, corallite) ~ wound + temp , data = corallite.survival)
+surv.mod <- survfit(Surv(time, corallite) ~ wound + temp , data = corallite.survival)
+summary(surv.mod)
+```
+cox model (mixed effects model with genotype as random effect), interaction wound*temp, breaks assumption so doing only single fixed effects, interaction was not significant anyway
+```{r}
+cox.zph(coxme(Surv(time, corallite)~wound + temp + (1|genotype) , data = corallite.survival))
+coxme(Surv(time, corallite)~wound + temp + (1|genotype) , data = corallite.survival)
+coxme(Surv(time, corallite)~wound + temp + (1|genotype), data = corallite.survival) %>% tbl_regression(exp = T)
+```
+breaks assumption. interaction also breaks assumption^ 
+```{r}
+cox.zph(coxme(Surv(time, corallite)~treatment + (1|genotype) , data = corallite.survival))
+coxme(Surv(time, corallite)~treatment + (1|genotype) , data = corallite.survival)
+coxme(Surv(time, corallite)~treatment + (1|genotype), data = corallite.survival) %>% tbl_regression(exp = T)
+```
+
+survival figure
+```{r}
+ggsurvplot(
+   surv.mod,                     # survfit object with calculated statistics.
+   data = corallite.survival,             # data used to fit survival curves.
+   risk.table = TRUE,       # show risk table.
+   conf.int = TRUE,         # show confidence intervals for 
+                            # point estimates of survival curves.
+                            # survival estimates.
+   xlab = "Time in days",   # customize X axis label
+   ggtheme = theme_light(), # customize plot and risk table with a theme.
+ risk.table.y.text.col = T, # colour risk table text annotations.
+  risk.table.y.text = FALSE, # show bars instead of names in text annotations
+             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top"
+                            # in legend of risk table
+)
+```
+
+# NEW TISSUE
+survival dataframe
+```{r}
+#clean data frame for columns we want, change timepoint and healed to numeric for model
+data3%>%select(coral_id, time, new_tissue, wound, temp, genotype, percent_affected)%>%group_by(coral_id)%>%filter(lag(new_tissue)!=1)%>%ungroup()%>%filter(new_tissue == 1 | time == 19) %>% mutate(time = as.numeric(time), new_tissue = as.character(new_tissue), new_tissue = as.numeric(new_tissue))%>%unite("treatment", wound:temp, remove = FALSE)-> newtissue.survival
+```
+survival curve
+```{r}
+survfit(Surv(time, new_tissue) ~ wound + temp , data = newtissue.survival)
+surv.mod <- survfit(Surv(time, new_tissue) ~ wound + temp , data = newtissue.survival)
+summary(surv.mod)
+```
+cox model (mixed effects model with genotype as random effect)
+```{r}
+cox.zph(coxme(Surv(time, new_tissue)~wound*temp + (1|genotype) , data = newtissue.survival))
+coxme(Surv(time, new_tissue)~wound*temp + (1|genotype) , data = newtissue.survival)
+coxme(Surv(time, new_tissue)~wound*temp + (1|genotype), data = newtissue.survival) %>% tbl_regression(exp = T)
+```
+
+using treatment instead of wound and temp gives the same results
+```{r}
+cox.zph(coxme(Surv(time, new_tissue)~treatment + (1|genotype) , data = newtissue.survival))
+coxme(Surv(time, new_tissue)~treatment + (1|genotype) , data = newtissue.survival)
+coxme(Surv(time, new_tissue)~treatment + (1|genotype), data = newtissue.survival) %>% tbl_regression(exp = T)
+```
+
+survival figure
+```{r}
+ggsurvplot(
+   surv.mod,                     # survfit object with calculated statistics.
+   data = newtissue.survival,             # data used to fit survival curves.
+   risk.table = TRUE,       # show risk table.
+   conf.int = TRUE,         # show confidence intervals for 
+                            # point estimates of survival curves.
+                            # survival estimates.
+   xlab = "Time in days",   # customize X axis label
+   ggtheme = theme_light(), # customize plot and risk table with a theme.
+ risk.table.y.text.col = T, # colour risk table text annotations.
+  risk.table.y.text = FALSE, # show bars instead of names in text annotations
+             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top"
+                            # in legend of risk table
+)
+```
+
