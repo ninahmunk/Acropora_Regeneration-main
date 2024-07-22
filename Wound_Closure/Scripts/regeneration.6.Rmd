@@ -89,22 +89,32 @@ cox.zph(coxme(Surv(time, polyp)~treatment + (1|genotype) , data = polyp.survival
 coxme(Surv(time, polyp)~treatment + (1|genotype) , data = polyp.survival)
 coxme(Surv(time, polyp)~treatment + (1|genotype), data = polyp.survival) %>% tbl_regression(exp = T)
 ```
+```{r}
+# List of ggsurvplots
+splots <- list()
+```
+
+
 survival figure
 ```{r}
 ggsurvplot(
    surv.mod,                     # survfit object with calculated statistics.
    data = polyp.survival,             # data used to fit survival curves.
-   risk.table = TRUE,       # show risk table.
-   conf.int = TRUE,         # show confidence intervals for 
-                            # point estimates of survival curves.
+   #risk.table = TRUE,       # show risk table.
+   conf.int = FALSE,         # show confidence intervals for 
+                           # point estimates of survival curves.
                             # survival estimates.
-   xlab = "Time in days",   # customize X axis label
+   xlab = " ",   # customize X axis label
    ggtheme = theme_light(), # customize plot and risk table with a theme.
- risk.table.y.text.col = T, # colour risk table text annotations.
-  risk.table.y.text = FALSE, # show bars instead of names in text annotations
-             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top"
+ #risk.table.y.text.col = T, # colour risk table text annotations.
+ # risk.table.y.text = FALSE, # show bars instead of names in text annotations
+  legend = "none",
+            # legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top",
+ fun = "event"
                             # in legend of risk table
-)
+) -> splots[[1]]
+  
+
 
 ```
 
@@ -133,22 +143,26 @@ coxme(Surv(time, corallite)~treatment + (1|genotype) , data = corallite.survival
 coxme(Surv(time, corallite)~treatment + (1|genotype), data = corallite.survival) %>% tbl_regression(exp = T)
 ```
 
+
 survival figure
 ```{r}
 ggsurvplot(
    surv.mod,                     # survfit object with calculated statistics.
    data = corallite.survival,             # data used to fit survival curves.
-   risk.table = TRUE,       # show risk table.
-   conf.int = TRUE,         # show confidence intervals for 
+  # risk.table = TRUE,       # show risk table.
+   conf.int = FALSE,         # show confidence intervals for 
+  ylab = " ",
                             # point estimates of survival curves.
-                            # survival estimates.
-   xlab = "Time in days",   # customize X axis label
+                          # survival estimates.
+   xlab = "Time (Days)",   # customize X axis label
    ggtheme = theme_light(), # customize plot and risk table with a theme.
- risk.table.y.text.col = T, # colour risk table text annotations.
-  risk.table.y.text = FALSE, # show bars instead of names in text annotations
-             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top"
+# risk.table.y.text.col = T, # colour risk table text annotations.
+ # risk.table.y.text = FALSE, # show bars instead of names in text annotations
+            # legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top",
+legend = "none",
+  fun = "event"
                             # in legend of risk table
-)
+) -> splots[[2]]
 ```
 
 # NEW TISSUE
@@ -182,16 +196,33 @@ survival figure
 ggsurvplot(
    surv.mod,                     # survfit object with calculated statistics.
    data = newtissue.survival,             # data used to fit survival curves.
-   risk.table = TRUE,       # show risk table.
-   conf.int = TRUE,         # show confidence intervals for 
+  # risk.table = TRUE,       # show risk table.
+   conf.int = FALSE,         # show confidence intervals for 
                             # point estimates of survival curves.
                             # survival estimates.
-   xlab = "Time in days",   # customize X axis label
+   xlab = " ",   # customize X axis label
+  ylab = " ",
    ggtheme = theme_light(), # customize plot and risk table with a theme.
- risk.table.y.text.col = T, # colour risk table text annotations.
-  risk.table.y.text = FALSE, # show bars instead of names in text annotations
-             legend.title = "Treatments", legend.labs = c("FA", "FE", "AA", "AE"), legend = "top"
+ #risk.table.y.text.col = T, # colour risk table text annotations.
+ # risk.table.y.text = FALSE, # show bars instead of names in text annotations
+             legend.title = "Treatments", legend.labs = c("F,27", "F,29", "A,27", "A,29"), legend = "top",
+ fun = "event"
                             # in legend of risk table
-)
+) -> splots[[3]]
+```
+
+
+```{r}
+
+
+# Arrange multiple ggsurvplots and print the output
+arrange_ggsurvplots(splots, print = TRUE, labels = c("A", " B", "C"),
+  ncol = 3, nrow = 1, risk.table.height = 0.4) -> surv.plot
+
+ggsave("survival.jpg", plot = surv.plot,
+       width = 12,
+       height = 6,
+       units = "in")
+
 ```
 

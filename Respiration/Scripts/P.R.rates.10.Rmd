@@ -1,0 +1,195 @@
+---
+title: "making figures and combined plots of respirometry data and fvfm"
+author: "Ninah Munk"
+date: "2024-07-09"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(rstatix)
+library(Rmisc)
+library(lmerTest)
+library(tidyverse)
+library(janitor)
+library(emmeans)
+library(plyr)
+library(ggthemes)
+library(here)
+library(pbkrtest)
+library(sjPlot)
+library(knitr)
+library(kableExtra)
+library(ggpattern)
+library(hrbrthemes)
+library(ggpubr)
+```
+
+# Load Data
+```{r}
+
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Respiration/Output/full.data.cleaned.csv")-> data
+read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-main/Wound_Closure/Data/worm_damage.csv")-> worm
+```
+
+Clean Data
+```{r}
+#clean data
+corals_to_remove <- c(11, 5, 37, 104, 71, 17, 29, 100)
+data <- data[!(data$coral_num %in% corals_to_remove), ]
+```
+
+
+More clean up + combine data frames
+```{r}
+data%>%rename(coral_id = coral_num)%>%select(-X) -> data
+
+worm%>%select(coral_id, affected, percent_affected)-> worm.damage
+
+data%>%left_join(worm.damage, by = "coral_id")-> data2
+
+```
+
+Change timepoint to be a continuous variable  
+```{r}
+
+data2%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
+                                     timepoint == "day1" ~ "1",
+                                     timepoint == "day10" ~ "10",
+                                     timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.numeric(timepoint),
+                                                                            temp = as.factor(temp),
+                                                                            wound = as.factor(wound),
+                                                                            genotype = as.factor(genotype)) -> data2
+
+```
+
+Filter data for less than 10% worm damage
+```{r}
+rates.filtered = subset(data2, percent_affected <= 10)
+```
+
+subsetting rates
+```{r}
+#RESPIRATION
+rates.filtered%>%filter(!timepoint == 0)%>%filter(rate == "Respiration") -> resp.filtered
+
+#NET PHOTOSYNTHESIS
+rates.filtered%>%filter(!timepoint == 0)%>%filter(rate == "Net Photosynthesis") -> netphoto.filtered
+
+```
+
+calcualte P:R
+```{r}
+rates.filtered%>%filter(!rate == "Net Photosynthesis")%>%select(rate, coral_id, temp, wound, genotype, timepoint, umol.cm2.hr)%>%pivot_wider(names_from = rate, values_from = umol.cm2.hr)%>%clean_names() -> rates.wide
+
+rates.wide%>%mutate(ratio = ((11*gross_photosynthesis)/(24*respiration))) ->ratio
+
+ratio%>%filter(!timepoint == 0)-> ratio.filtered
+```
+
+Respiration figure
+```{r}
+ggplot(data = resp.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, col = temp))+
+  stat_summary(fun=mean, geom="point", aes(group=temp), size = 3, position = position_dodge(width = 0.3))+
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.3))+
+  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
+  ylab("O\u00b2 \u00b5mol/cm\u00b2/hr")+
+  xlab(NULL)+
+  facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free")+ 
+  labs(fill = "Temperature")+
+ scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
+  guides(col = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
+  theme_base()+
+   theme_few(base_size = 20)+
+  theme(panel.spacing=unit(1,"lines"))+
+  theme(legend.position = "none" ) -> resp
+
+print(resp)
+        #legend.text = element_text(size = 12), 
+   # legend.title = element_text(size = 14)
+```
+
+net photosynthesis figure
+```{r}
+ggplot(data = netphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, col = temp))+
+  stat_summary(fun=mean, geom="point", aes(group=temp), size = 3, position = position_dodge(width = 0.3))+
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.3))+
+  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
+  ylab("O\u00b2 \u00b5mol/cm\u00b2/hr")+
+  xlab(NULL)+
+  facet_grid(~wound, labeller = labeller(wound = c("0" = " ", "1" = " ", "2" = " ")), scales = "free")+ 
+  labs(fill = "Temperature")+
+ scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
+  guides(col = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
+  theme_base()+
+   theme_few(base_size = 20)+
+  theme(panel.spacing=unit(1,"lines"))+
+  theme(legend.position = "none")+
+  theme(strip.text = element_blank()) -> net.photo
+
+print(net.photo)
+```
+
+
+P:R fig
+```{r}
+ggplot(data = ratio.filtered, aes(x = timepoint, y = ratio, col = temp, group = temp, shape = temp))+
+  #geom_jitter(size = .5, alpha = .5)+
+ stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.3)) +
+  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.3), aes(group = temp))+
+  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
+ #geom_smooth(data=ratio.filtered, aes(x=timepoint, y=ratio, group = temp), alpha=0.3, method = "lm")+
+  ylab(NULL)+
+  xlab("Time (Day)")+
+ facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  theme_classic()+
+  labs(color = "Temperature")+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
+  scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
+   theme_few(base_size = 20) +
+  theme(panel.spacing=unit(1,"lines"))+
+  guides(color = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
+  theme(strip.text = element_blank())+ theme(legend.position = "right") -> PR
+```
+
+combining net photosynthesis, respiration, and P:R plots
+```{r}
+annotate_figure(
+  resp,
+  left = text_grob("Respiration",
+                   color = "black", rot = 90, size = 20, face = "bold")
+  ) -> resp.fig
+
+annotate_figure(
+  net.photo,
+  left = text_grob("Net Photosynthesis",
+                   color = "black", rot = 90, size = 20, face = "bold")
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> net.photo.fig
+
+annotate_figure(
+  PR,
+  left = text_grob("Daily P:R",
+                   color = "black", rot = 90, size = 20, face = "bold"),
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> PR.fig
+
+ggarrange(resp.fig, net.photo.fig, PR.fig,                                                # First row with scatter plot
+          nrow = 3, 
+          labels = c("A", "B", "C")                                        # Labels of the scatter plot
+          ) -> fig2
+
+
+ggsave("R.NP.PR.fig.jpg", plot = fig2, path = here(),
+       width = 16,
+       height = 12,
+       units = "in")
+
+```
+

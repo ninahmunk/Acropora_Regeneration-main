@@ -219,11 +219,24 @@ ggplot(data=temperature,
   labs(title=" ", y="Temperature (°C)", x="Day")+
   scale_color_manual(values = c("Elevated" = "#CC79A7", "Ambient" = "#D55E00")) -> Figure.1
 
+#this one
+ggplot(data=temperature, aes((x=as.Date(longdate, format = "%m / %d / %Y")), y=meantemp, color = treatment, shape = treatment)) +
+  geom_point(size=3)+ 
+  geom_errorbar(aes(ymin=meantemp-std_err, ymax=meantemp+std_err), width=.9)+
+  theme(axis.text.x = element_text(angle=45, margin = margin(t=20, r=100)), text=element_text(size=20))+
+  labs(y="Temperature (°C)", x="Time (Day)")+
+  scale_color_manual(values = c("Elevated" = "red", "Ambient" = "blue"))+
+  scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
+  guides(col = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
+  theme_classic()+
+  theme_few(base_size = 20) -> temp
 
-# ggsave("Figure.1.png", plot = Figure.1, path = here(),
-#        width = 12,
-#        height = 6,
-#        units = "in")
+
+
+ggsave("temperature.jpg", plot = temp, path = here(),
+       width = 12,
+       height = 8,
+       units = "in")
 
 #temp ranges, elevated = 29.69927 =/- xx to 28.73736 +/- xx; ambient 28.02507 +/- xx to 27.88757 =/- xx
 ############## t-test ########################################################## #####

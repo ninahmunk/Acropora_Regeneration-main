@@ -200,10 +200,24 @@ xlab(expression("Temperature"))+
 
 print(figure_1)
 
+
+ggplot(meangrowthrate, aes(x = temp, y = Mean, colour = temp, fill = temp))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+  geom_bar(stat="identity", position="dodge") +geom_errorbar(aes(ymin=Mean-std_err$growthrate, ymax=Mean+std_err$growthrate), width=0, position=position_dodge(width = 0.9))+
+  geom_point(data = growthdata.filtered, aes(x = temp, y = growthrate, colour = temp), shape = 21, alpha = 0.7,
+             position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('blue', 'red', 'blue', 'red', 'blue', 'red'), guide="none")+
+  scale_fill_manual(values = c('white', 'white'), labels=c("Ambient", "Elevated"), guide = "none")+
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Temperature"))+
+  ylab(expression(paste("Calcification Rate (mg cm\u00b2 /day)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 20) -> GR
+
 #save plot
 
-ggsave("figure_1.png", plot = figure_1, path = here(),
-       width = 8,
+ggsave("calcification.png", plot = GR, path = here(),
+       width = 12,
        height = 8,
        units = "in")
 ```

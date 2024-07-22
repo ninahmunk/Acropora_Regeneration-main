@@ -91,30 +91,88 @@ Checking respiration rates prior to onset of experiment (day 0/-7).
 ** no significant differences **
 ```{r}
 mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Respiration")%>%filter(timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-anova(mod, type = 3)
+anova(mod)
 ```
-Respiration figure that pairs with result from final model. 
+Model for respiration at day 1
+```{r}
+# Subset data for a single time point
+time1 <- resp.filtered%>%filter(timepoint == 1)
+# Mixed-effects model for a single time point
+model_time1 <- lmer(umol.cm2.hr ~ temp*wound + (1|genotype), data=time1, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+summary(model_time1)
+# ANOVA on the mixed model
+anova(model_time1)
+# Post-hoc tests
+emmeans(model_time1, pairwise ~ temp*wound)
+# Visualize data
+ggplot(time1, aes(x=temp, y=umol.cm2.hr, color=temp)) + 
+ # geom_point() + 
+  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))
+
+```
+
+Model for respiration at day 10
+```{r}
+time2 <- resp.filtered%>%filter(timepoint == 10)
+model_time2 <- lmer(umol.cm2.hr ~ wound*temp + (1|genotype), data=time2, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+summary(model_time2)
+anova(model_time2)
+ggplot(time2, aes(x=temp, y=umol.cm2.hr, color=temp)) + 
+  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4)) 
+```
+
+Model for respiration at day 19
+```{r}
+time3 <- resp.filtered%>%filter(timepoint == 19)
+model_time3 <- lmer(umol.cm2.hr ~ temp*wound + (1|genotype), data=time2, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+summary(model_time3)
+anova(model_time3)
+ggplot(time3, aes(x=temp, y=umol.cm2.hr, color=temp)) + 
+  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))
+
+```
+
+
+Respiration figure that pairs with result from full lmer model with time. 
 ```{r}
 
-ggplot(data = resp.filtered, aes(x = timepoint, y = umol.cm2.hr, col = temp))+
+ggplot(data = resp.filtered, aes(x = timepoint, y = umol.cm2.hr, col = temp, linetype = temp))+
   #geom_jitter(size = .5, alpha = .5)+
   #stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4)) +
  # stat_summary( fun = "mean", geom = "point", size = 2, position = position_dodge(width = 0.4))+ 
   #stat_summary( fun = "mean", geom = "line", size = .5, position = position_dodge(width = 0.4), linetype = "dashed", aes(group = temp))+
-  geom_smooth(data=resp.filtered, aes(x=timepoint, y=umol.cm2.hr), alpha=0.3, method = "lm")+
-  ylab("Respiration (umol.cm2.hr)")+
+  geom_smooth(data=resp.filtered, aes(x=timepoint, y=umol.cm2.hr, col = temp, linetype = temp), alpha=0.3, method = "lm")+
+  ylab("Respiration (O\u00b2 \u00b5mol/cm\u00b2/hr)")+
   xlab("Time")+
  # facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
   theme_classic()+
   labs(color = "Temperature")+
-  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient (~28)", "Elevated (~30)"))+
-   theme_few(base_size = 15) -> resp
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
+   theme_few(base_size = 12)+
+  annotate("text", x=12, y=.44, label= "p < 0.01", size = 6)+
+  scale_linetype_discrete(name="Temperature", 
+                          breaks=c("A", "H"), 
+                          labels = c("Ambient", "Elevated"))+
+  guides(col = guide_legend("Temperature"), linetype = guide_legend("Temperature"))+ 
+  theme(legend.position = "none") -> resp
 
+
+ggsave("resp.png", plot = resp, path = here(),
+       width = 10,
+       height = 8,
+       units = "in")
+```
+
+resp figure that pairs with net photo figure
+```{r}
 ggplot(data = resp.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, col = temp))+
   stat_summary(fun=mean, geom="point", aes(group=temp), size = 3, position = position_dodge(width = 0.3))+
   stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.3))+
   stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
-  ylab("O\u00b2 (\u00b5mol/cm\u00b2/hr")+
+  ylab("O\u00b2 (\u00b5mol/cm\u00b2/hr)")+
   xlab(NULL)+
   facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free")+ 
   labs(fill = "Temperature")+
@@ -124,58 +182,9 @@ ggplot(data = resp.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, c
   theme_base()+
    theme_few(base_size = 20)+
   theme(panel.spacing=unit(1,"lines"))+
-  theme(legend.position = "none" )-> resp
+  theme(legend.position = "none" ) -> resp
         #legend.text = element_text(size = 12), 
    # legend.title = element_text(size = 14)
-
-
-# ggsave("resp.png", plot = resp, path = here(),
-#        width = 10,
-#        height = 8,
-#        units = "in")
-```
-I want to examine differences in respiration rates at each timepoint
-```{r}
-# Subset data for a single time point
-time1 <- resp.filtered%>%filter(timepoint == 1)
-# Mixed-effects model for a single time point
-model_time1 <- lmer(umol.cm2.hr ~ temp*wound + (1|genotype), data=time1, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-summary(model_time1)
-# ANOVA on the mixed model
-Anova(model_time1)
-# Post-hoc tests
-emmeans(model_time1, pairwise ~ temp*wound)
-# Visualize data
-ggplot(time1, aes(x=temp, y=umol.cm2.hr, color=temp)) + 
- # geom_point() + 
-  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))
-
-
-time2 <- resp.filtered%>%filter(timepoint == 10)
-model_time2 <- lmer(umol.cm2.hr ~ temp*wound + (1|genotype), data=time2, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-summary(model_time2)
-Anova(model_time2)
-ggplot(time2, aes(x=temp, y=umol.cm2.hr, color=temp)) + 
-  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4)) 
-
-time3 <- resp.filtered%>%filter(timepoint == 19)
-model_time3 <- lmer(umol.cm2.hr ~ temp*wound + (1|genotype), data=time2, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-summary(model_time3)
-Anova(model_time3)
-ggplot(time3, aes(x=temp, y=umol.cm2.hr, color=temp)) + 
-  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))
-
-ggplot(resp.filtered, aes(x=timepoint, y=umol.cm2.hr, color=temp)) + 
-  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))
-
-ggplot(resp.filtered, aes(x=timepoint, y=umol.cm2.hr, color=wound)) + 
-  stat_summary(fun=mean, geom="point", aes(group=wound), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))
-
 ```
 
 
@@ -196,95 +205,145 @@ Checking net photosynthesis rates prior to onset of experiment (day 0/-7).
 mod<- lmer(umol.cm2.hr ~ wound*temp  + (1|genotype), data = rates.filtered%>%filter(rate == "Net Photosynthesis")%>%filter(timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
 anova(mod, type = 3)
 ```
-
-Net photosynthesis figure that pairs with result from model
-```{r}
-
-ggplot(data = netphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, col = temp))+
-  stat_summary(fun=mean, geom="point", aes(group=temp), size = 3, position = position_dodge(width = 0.3))+
-  stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.3))+
-  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
-  ylab("O\u00b2 (\u00b5mol/cm\u00b2/hr)")+
-  xlab(NULL)+
-  facet_grid(~wound, labeller = labeller(wound = c("0" = " ", "1" = " ", "2" = " ")), scales = "free")+ 
-  labs(fill = "Temperature")+
- scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
-  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
-  guides(col = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
-  theme_base()+
-   theme_few(base_size = 20)+
-  theme(panel.spacing=unit(1,"lines"))+
-  theme(legend.position = "none")-> net.photo
- 
-
-# ggsave("net.photo.png", plot = net.photo, path = here(),
-#        width = 10,
-#        height = 8,
-#        units = "in")
-
-```
-Examining differences in net photosynthetic rates at each timepoint
+model for net photosynthesis at day 1
 ```{r}
 # Subset data for a single time point
 time1 <- netphoto.filtered%>%filter(timepoint == 1)
 # Mixed-effects model for a single time point
-model_time1 <- lmer(umol.cm2.hr ~ temp*wound + (1|genotype), data=time1, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+model_time1 <- lmer(umol.cm2.hr ~ wound*temp + (1|genotype), data=time1, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
 summary(model_time1)
 # ANOVA on the mixed model
-Anova(model_time1)
+anova(model_time1)
 # Visualize data
 ggplot(time1, aes(x=temp, y=umol.cm2.hr, color=temp)) + 
  # geom_point() + 
   stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
   stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))
 
-
+```
+Model for net photosynthesis at day 10
+```{r}
 time2 <- netphoto.filtered%>%filter(timepoint == 10)
-model_time2 <- lmer(umol.cm2.hr ~ temp*wound + (1|genotype), data=time2, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+model_time2 <- lmer(umol.cm2.hr ~ wound*temp + (1|genotype), data=time2, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
 summary(model_time2)
-Anova(model_time2)
+anova(model_time2)
 # Post-hoc tests
 emmeans(model_time2, pairwise ~ temp*wound)
 ggplot(time2, aes(x=temp, y=umol.cm2.hr, color=temp)) + 
   stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
   stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))+ facet_wrap(~wound)
-
+```
+model for net photosynthesis at day 19
+```{r}
 time3 <- netphoto.filtered%>%filter(timepoint == 19)
-model_time3 <- lmer(umol.cm2.hr ~ temp*wound + (1|genotype), data=time3, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+model_time3 <- lmer(umol.cm2.hr ~ wound*temp + (1|genotype), data=time3, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
 summary(model_time3)
-Anova(model_time3)
+anova(model_time3)
 # Post-hoc tests
 emmeans(model_time3, pairwise ~ temp*wound)
+```
+Net photosynthesis figure that pairs with result from model
+```{r}
 
-ggplot(time3, aes(x=temp, y=umol.cm2.hr, color=temp)) + 
-  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))+ facet_wrap(~wound)
+ggplot(data = netphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, linetype = temp))+
+  geom_smooth(data=netphoto.filtered, aes(x=timepoint, y=umol.cm2.hr, col = temp, linetype = temp), alpha=0.3, method = "lm")+
+  ylab("Net Photosynthesis (O\u00b2 \u00b5mol/cm\u00b2/hr)")+
+  xlab("Time (Day)")+
+ facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  theme_classic()+
+  labs(color = "Temperature")+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
+   theme_few(base_size = 12)+
+ # annotate("text", x=12, y=.44, label= "p < 0.01", size = 6)+
+  scale_linetype_discrete(name="Temperature", 
+                          breaks=c("A", "H"), 
+                          labels = c("Ambient", "Elevated"))+
+  guides(col = guide_legend("Temperature"), linetype = guide_legend("Temperature"))+
+  theme(legend.position = "right")-> net.photo
 
-ggplot(netphoto.filtered, aes(x=timepoint, y=umol.cm2.hr, color=temp)) + 
-  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))+ facet_wrap(~wound)
+annotate_figure(
+  net.photo,
+  top = text_grob("p = 0.035",
+                   color = "black", size = 15)
+  ) -> net.photo.fig
 
-ggplot(netphoto.filtered, aes(x=timepoint, y=umol.cm2.hr, color=wound)) + 
-  stat_summary(fun=mean, geom="point", aes(group=wound), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4))
-
+ggsave("net.photo.jpg", plot = net.photo.fig, path = here(),
+       width = 10,
+       height = 8,
+       units = "in")
 ```
 
+
+Net photosynthesis figure that pairs with respiration figure
 ```{r}
 
 ggplot(data = netphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, col = temp))+
   stat_summary(fun=mean, geom="point", aes(group=temp), size = 3, position = position_dodge(width = 0.3))+
   stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.3))+
-  ylab("Net Photosynthesis (umol/cm2/hr)")+
-  xlab(NULL)+
-  facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free")+ 
+  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
+  ylab("Net photosynthesis (O\u00b2 \u00b5mol/cm\u00b2/hr)")+
+  xlab("Time (day)")+
+  facet_grid(~wound, labeller = labeller(wound = c("0" = " ", "1" = " ", "2" = " ")), scales = "free")+ 
   labs(fill = "Temperature")+
- # scale_x_continuous(labels = c("1", "10", "19"))+
  scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
   scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
   guides(col = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
-  theme_base()
+  theme_base()+
+   theme_few(base_size = 15)+
+  theme(panel.spacing=unit(1,"lines"))+
+  theme(legend.position = "bottom") -> net.photo
+ 
+
 ```
+summary statistics for NP
+```{r}
+# Compared to control corals at elevated temperature, final mean  NP is  1.21 and 1.17 times greater in fragmented and abraded corals, respectively.
+
+#average NP control corals day19: 0.3171588
+#average NP frag corals day 19: 0.3734911
+#average NP abraded corals day 19: 0.3832824
+
+
+#take the larger num and divide by smaller number
+0.3832824/0.3171588 # 1.208487 
+0.3734911/0.3171588 # 1.177615
+
+# By the end of the study, mean NP increased x at elevated temperature in control corals, while NP increased by x and x% in fragmented and abrased corals, respectively.
+
+#average NP control corals day 1: 0.2986437
+#average NP frag corals day 1: 0.2982166
+#average NP abraded corals day 19: 0.2748130
+# (final - initial) / initial
+#control: 
+  ((0.3171588 - 0.2986437) / 0.2986437) * 100
+# fragment
+  ((0.3734911 - 0.2982166) / 0.2982166) * 100
+# abrasion
+  ((0.3832824 - 0.2748130) / 0.2748130) * 100
+# Compared to control corals at elevated temperature, NP increased x and x times more in fragmented and abraded corals, respectively after 19 days. 
+
+# Pooled across injury status, day 10 NP was x times greater than day 1 R at elevated temperature. Pooled across injury status, the difference in mean NP between temperatures at day 10 was x times greater than the difference between mean R at day 1. 
+
+# ambient day 1 mean NP pooled across injury: 0.2905473
+# elevated day 1 mean NP pooled across injury: 0.2905696
+# ambient day 10 mean NP pooled across injury:0.2694341
+# elevated day 10 mean NP pooled across injury: 0.3871514
+
+0.3871514 - 0.2694341 #NP difference day 10: 0.1177173
+0.4458603 - 0.4009609 # R difference day 1: 0.0448994
+
+0.1177173 / 0.0448994 # 2.621801 times higher NP than R
+
+# elevated day 1 mean R pooled across injury: 0.4458603
+# ambient day 1 mean R pooled across injury: 0.4009609
+summarySE(netphoto.filtered, measurevar = "umol.cm2.hr", groupvars = c("temp", "timepoint"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) 
+
+summarySE(resp.filtered, measurevar = "umol.cm2.hr", groupvars = c("temp", "timepoint"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) 
+```
+
+
 
 # GROSS PHOTOSYNTHESIS
 
@@ -311,14 +370,34 @@ ggplot(data = grossphoto.filtered, aes(x = timepoint, y = umol.cm2.hr))+
   # stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.2)) +
   # stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
   # stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed")+
-  ylab("Gross Photosynthesis (umol/cm2/hr)")+
-  xlab("Day")+
+  ylab("Gross Photosynthesis (O\u00b2 \u00b5mol/cm\u00b2/hr)")+
+  xlab("Time (Day)")+
  # facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
   theme_classic()+
   #labs(color = "Temperature")+
   #scale_color_manual(values = c('blue', 'red'), labels = c("Ambient (~28)", "Elevated (~30)"))+
-   theme_few(base_size = 15)
+   theme_few(base_size = 12)+
+  annotate("text", x=12, y=.77, label= "p = 0.04", size = 6) -> gross.photo
+
+
+ggsave("gross.photo.jpg", plot = gross.photo, path = here(),
+       width = 10,
+       height = 8,
+       units = "in")
+
+
 ```
+
+summary statistics for GP
+```{r}
+# GP day 1: 0.7142854
+# GP day 19: 0.7537166
+((0.7537166 - 0.7142854)/0.7142854)*100
+
+summarySE(grossphoto.filtered, measurevar = "umol.cm2.hr", groupvars = c( "temp", "timepoint"),
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
+```
+
 
 # DAILY P:R RATIO
 
@@ -326,7 +405,7 @@ wrangle data frame and calculate ratio
 ```{r}
 rates.filtered%>%filter(!rate == "Net Photosynthesis")%>%select(rate, coral_id, temp, wound, genotype, timepoint, umol.cm2.hr)%>%pivot_wider(names_from = rate, values_from = umol.cm2.hr)%>%clean_names() -> rates.wide
 
-rates.wide%>%mutate(ratio = ((12*gross_photosynthesis)/(24*respiration))) ->ratio
+rates.wide%>%mutate(ratio = ((11*gross_photosynthesis)/(24*respiration))) ->ratio
 ```
 
 Full LMM model for daily P:R 
@@ -338,13 +417,80 @@ mod<- lmer(ratio ~ wound*temp*timepoint + (1|genotype/coral_id), data = ratio.fi
 anova(mod, type = 3)
 
 ```
+
 Checking daily P:R prior to onset of experiment (day 0/-7)
 ** no significant differences **
 ```{r}
 mod<- lmer(ratio ~ wound*temp + (1|genotype), data = ratio%>%filter(timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
 anova(mod, type = 3)
 ```
+model for P:R day 1
+```{r}
+# Subset data for a single time point
+time1 <- ratio.filtered%>%filter(timepoint == 1)
+# Mixed-effects model for a single time point
+model_time1 <- lmer(ratio ~ wound*temp + (1|genotype), data=time1, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+summary(model_time1)
+# ANOVA on the mixed model
+anova(model_time1)
+
+``` 
+ model for P:R day 10
+```{r}
+time2 <- ratio.filtered%>%filter(timepoint == 10)
+model_time2 <- lmer(ratio ~ wound*temp + (1|genotype), data=time2, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+summary(model_time2)
+anova(model_time2)
+emmeans(model_time2, pairwise ~ temp*wound) # no significant pairwise comparisons
+
+ggplot(time2, aes(x=temp, y=ratio, color=temp)) + 
+  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4)) 
+
+```
+ 
+ P:R model for day 19
+```{r}
+time3 <- ratio.filtered%>%filter(timepoint == 19)
+model_time3 <- lmer(ratio ~ wound*temp + (1|genotype), data=time3, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+summary(model_time3)
+anova(model_time3)
+emmeans(model_time3, pairwise ~ temp*wound)
+```
+ 
  Daily P:R figure that pairs with result from model
+```{r}
+ggplot(data = ratio.filtered, aes(x = timepoint, y = ratio, col = temp, linetype = temp))+
+ #  #geom_jitter(size = .5, alpha = .5)+
+ # stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.3)) +
+ #  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.3), aes(group = temp))+
+ #  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
+ geom_smooth(data=ratio.filtered, aes(x=timepoint, y=ratio, col = temp, linetype = temp), alpha=0.3, method = "lm")+
+  ylab("Daily P:R")+
+  xlab("Time (Day)")+
+ #facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  theme_classic()+
+  labs(color = "Temperature")+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
+ # scale_shape_manual(values = c(1, 19), labels = c("Ambient (~28)", "Elevated (~30)"))+
+   theme_few(base_size = 12) +
+  theme(panel.spacing=unit(1,"lines"))+
+  theme(strip.text = element_blank())+
+  annotate("text", x=12, y=.92, label= "p < 0.01", size = 6)+
+  scale_linetype_discrete(name="Temperature", 
+                          breaks=c("A", "H"), 
+                          labels = c("Ambient", "Elevated"))+
+  guides(col = guide_legend("Temperature"), linetype = guide_legend("Temperature"))+ 
+  theme(legend.position = "none") -> PR
+
+
+ggsave("PR.png", plot = PR, path = here(),
+       width = 12,
+       height = 8,
+       units = "in")
+```
+
+mean ratios figure
 ```{r}
 ggplot(data = ratio.filtered, aes(x = timepoint, y = ratio, col = temp, group = temp, shape = temp))+
   #geom_jitter(size = .5, alpha = .5)+
@@ -362,48 +508,17 @@ ggplot(data = ratio.filtered, aes(x = timepoint, y = ratio, col = temp, group = 
    theme_few(base_size = 20) +
   theme(panel.spacing=unit(1,"lines"))+
   guides(color = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
-  theme(strip.text = element_blank())-> PR
-
+  theme(strip.text = element_blank())+ theme(legend.position = "none")
 
 print(PR)
-# ggsave("PR.png", plot = PR, path = here(),
-#        width = 10,
-#        height = 8,
-#        units = "in")
+ggsave("PR.png", plot = PR, path = here(),
+       width = 12,
+       height = 8,
+       units = "in")
 ```
 
 
-
-```{r}
-# Subset data for a single time point
-time1 <- ratio.filtered%>%filter(timepoint == 1)
-# Mixed-effects model for a single time point
-model_time1 <- lmer(ratio ~ temp*wound + (1|genotype), data=time1, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-summary(model_time1)
-# ANOVA on the mixed model
-Anova(model_time1)
-
-time2 <- ratio.filtered%>%filter(timepoint == 10)
-model_time2 <- lmer(ratio ~ temp*wound + (1|genotype), data=time2, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-summary(model_time2)
-Anova(model_time2)
-emmeans(model_time2, pairwise ~ temp*wound) # no significant pairwise comparisons
-
-ggplot(time2, aes(x=temp, y=ratio, color=temp)) + 
-  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4)) 
-
-time3 <- ratio.filtered%>%filter(timepoint == 19)
-model_time3 <- lmer(ratio ~ temp*wound + (1|genotype), data=time3, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-summary(model_time3)
-Anova(model_time3)
-emmeans(model_time3, pairwise ~ temp*wound) # no significant pairwise comparisons
-
-ggplot(time3, aes(x=temp, y=ratio, color=temp)) + 
-  stat_summary(fun=mean, geom="point", aes(group=temp), size=5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4)) +facet_grid(~wound)
-```
-
+# FIGURES 
 
 ```{r}
 rates.filtered%>%filter(!timepoint == 0) -> rates.filtered.2
@@ -478,5 +593,25 @@ ggsave("resp.photo.fig.jpg", plot = resp.photo.fig, path = here(),
        height = 8,
        units = "in")
 
+```
+
+arrange plots displaying model results
+```{r}
+ggarrange(net.photo,                                                 # First row with scatter plot
+          ggarrange(resp, gross.photo, PR, ncol = 3, labels = c("B", "C", "D")), # Second row with box and dot plots
+          nrow = 2, 
+          labels = "A"                                        # Labels of the scatter plot
+          ) -> rates.model.figure
+
+annotate_figure(
+  rates.model.figure,
+  top = text_grob("p = 0.35",
+                   color = "black", size = 20)
+  ) -> rates.model.figure.2
+
+ggsave("model.fig.2.jpg", plot = rates.model.figure.2, path = here(),
+       width = 12,
+       height = 8,
+       units = "in")
 ```
 

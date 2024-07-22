@@ -134,6 +134,23 @@ ggsave("figure_2.png", plot = figure2, path = here(),
        height = 8,
        units = "in")
 
+ggplot(meangrowthrate, aes(x = temp, y = Mean, col = temp, fill = temp))+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
+  geom_bar(stat="identity", position="dodge") +geom_errorbar(aes(ymin=Mean-std_err$bw.cm2.d, ymax=Mean+std_err$bw.cm2.d), width=0, position=position_dodge(width = 0.9))+
+  geom_point(data = data.filtered, aes(x = temp, y = bw.cm2.d, colour = temp), shape = 21, alpha = 0.7, position = position_jitterdodge(jitter.width = 0.3, jitter.height=0.2, dodge.width=0.9))+
+  scale_color_manual(values = c('blue', 'red', 'blue', 'red', 'blue', 'red'), guide="none")+
+  scale_fill_manual(values = c('white', 'white'), labels=c("Ambient", "Elevated"), guide = "none")+
+  scale_x_discrete(labels = c('Ambient','Elevated'))+
+xlab(expression("Temperature"))+
+  ylab(expression(paste("Buoyant Growth Rate (mg cm\u00b2 /day)")))+
+  theme(axis.text.x=element_text(colour="black"))+
+  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 20) -> BW
+
+ggsave("bw.growth.jpg", plot = BW, path = here(),
+       width = 12,
+       height = 8,
+       units = "in")
+
 ```
 
 # summary statistics 
