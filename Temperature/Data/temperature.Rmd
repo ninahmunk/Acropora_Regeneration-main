@@ -100,7 +100,7 @@ ggplot(data = ambientsump_date, aes(x = as.Date(date, format = "%m / %d / %Y"), 
 
 ```
 
-
+# Calculating mean temp for each date to plot.
 ```{r}
 ambientsump_date%>%separate(col = 'date',
                   into = c('month', 'day', 'year'),

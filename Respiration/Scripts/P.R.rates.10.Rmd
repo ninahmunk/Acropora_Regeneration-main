@@ -52,16 +52,13 @@ data%>%left_join(worm.damage, by = "coral_id")-> data2
 
 ```
 
-Change timepoint to be a continuous variable  
+Make all fixed effects factors  
 ```{r}
 
-data2%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
-                                     timepoint == "day1" ~ "1",
-                                     timepoint == "day10" ~ "10",
-                                     timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.numeric(timepoint),
-                                                                            temp = as.factor(temp),
-                                                                            wound = as.factor(wound),
-                                                                            genotype = as.factor(genotype)) -> data2
+data2%>%mutate(timepoint = as.factor(timepoint),
+               temp = as.factor(temp),
+               wound = as.factor(wound),
+               genotype = as.factor(genotype)) -> data2
 
 ```
 
@@ -70,90 +67,302 @@ Filter data for less than 10% worm damage
 rates.filtered = subset(data2, percent_affected <= 10)
 ```
 
-subsetting rates
+Subset respiration data, run lmer model, look at 3-way anova results, make pairwise comparisons
 ```{r}
 #RESPIRATION
-rates.filtered%>%filter(!timepoint == 0)%>%filter(rate == "Respiration") -> resp.filtered
+rates.filtered%>%filter(!timepoint == "day0")%>%filter(rate == "Respiration") -> resp.filtered
 
+#model for respiration
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = resp.filtered)
+
+anova(mod, type = 3) # significant temp*timepoint interaction
+
+emmeans(mod, pairwise ~ temp*timepoint) #make pairwise comparisons
+
+# checking for differences in groups pre-treatments
+mod<- lmer(umol.cm2.hr ~ wound*temp + (1|genotype), data = rates.filtered%>%filter(rate == "Respiration")%>%filter(timepoint == "day0"))
+anova(mod, type = 3)
+```
+Subset net photosynthesis data, run lmer model, look at 3-way anova results, make pairwise comparisons
+```{r}
 #NET PHOTOSYNTHESIS
-rates.filtered%>%filter(!timepoint == 0)%>%filter(rate == "Net Photosynthesis") -> netphoto.filtered
+rates.filtered%>%filter(!timepoint == "day0")%>%filter(rate == "Net Photosynthesis") -> netphoto.filtered
+
+#model for net photosynthesis
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = netphoto.filtered)
+
+anova(mod, type = 3) # significant temp*timepoint interaction
+
+emmeans(mod, pairwise ~ wound*temp*timepoint) #make pairwise comparisons
+
+# checking for differences in groups pre-treatments
+mod<- lmer(umol.cm2.hr ~ wound*temp + (1|genotype), data = rates.filtered%>%filter(rate == "Net Photosynthesis")%>%filter(timepoint == "day0"))
+anova(mod, type = 3)
+```
+
+Subset gross photosynthesis data, run lmer model, look at 3-way anova results, make pairwise comparisons
+```{r}
+#GROSS PHOTOSYNTHESIS
+rates.filtered%>%filter(!timepoint == "day0")%>%filter(rate == "Gross Photosynthesis") -> grossphoto.filtered
+
+#model for gross photosynthesis
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = grossphoto.filtered)
+
+anova(mod, type = 3) # significant effect of time and temperature 
+
+emmeans(mod, pairwise ~ temp*timepoint) #make pairwise comparisons
+
+# checking for differences in groups pre-treatments
+mod<- lmer(umol.cm2.hr ~ wound*temp + (1|genotype), data = rates.filtered%>%filter(rate == "Gross Photosynthesis")%>%filter(timepoint == "day0"))
+anova(mod, type = 3)
 
 ```
 
-calcualte P:R
+calculate P:R, run lmer model, look at 3-way anova results, make pairwise comparisons
 ```{r}
 rates.filtered%>%filter(!rate == "Net Photosynthesis")%>%select(rate, coral_id, temp, wound, genotype, timepoint, umol.cm2.hr)%>%pivot_wider(names_from = rate, values_from = umol.cm2.hr)%>%clean_names() -> rates.wide
 
 rates.wide%>%mutate(ratio = ((11*gross_photosynthesis)/(24*respiration))) ->ratio
 
-ratio%>%filter(!timepoint == 0)-> ratio.filtered
+ratio%>%filter(!timepoint == "day0")-> ratio.filtered
+
+#model for P:R
+mod<- lmer(ratio ~ wound*temp*timepoint + (1|genotype/coral_id), data = ratio.filtered)
+
+anova(mod, type = 3) #  significant temp*timepoint interaction
+
+emmeans(mod, pairwise ~ temp*timepoint) #make pairwise comparisons
+
+# checking for differences in groups pre-treatments
+mod<- lmer(ratio ~ wound*temp + (1|genotype), data = ratio%>%filter(timepoint == "day0"))
+anova(mod, type = 3)
+
 ```
+
+```{r}
+resp.filtered%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
+                                     timepoint == "day1" ~ "1",
+                                     timepoint == "day10" ~ "10",
+                                     timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.factor(timepoint)) -> resp.filtered
+```
+
 
 Respiration figure
 ```{r}
+# ggplot(data = resp.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, col = temp))+
+#   stat_summary(fun=mean, geom="point", aes(group=temp), size = 7.5, position = position_dodge(width = 0.3))+
+#   stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.3))+
+#   stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
+#   ylab("O\u00b2 \u00b5mol/cm\u00b2/hr")+
+#   xlab("Day")+
+#   facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), ncol = 1, scales = "free")+ 
+#   labs(fill = "Temperature")+
+#  scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
+#   scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
+#   guides(col = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
+#   theme_base()+
+#    theme_few(base_size = 30)+
+#   theme(panel.spacing=unit(2,"lines"))+
+#   theme(legend.position = "right" ) -> resp
+
 ggplot(data = resp.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, col = temp))+
-  stat_summary(fun=mean, geom="point", aes(group=temp), size = 3, position = position_dodge(width = 0.3))+
-  stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.3))+
-  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
+  stat_summary(fun=mean, geom="point", aes(group=temp), size = 7.5, position = position_dodge(width = 0.5))+
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.5))+
+  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.5), linetype = "dashed", aes(group = temp))+
   ylab("O\u00b2 \u00b5mol/cm\u00b2/hr")+
-  xlab(NULL)+
-  facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free")+ 
+  xlab("Day")+
+  #facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), ncol = 1, scales = "free")+ 
   labs(fill = "Temperature")+
- scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
-  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
+ scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Warming"))+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Warming"))+
   guides(col = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
   theme_base()+
-   theme_few(base_size = 20)+
-  theme(panel.spacing=unit(1,"lines"))+
+   theme_few(base_size = 30)+
+  theme(panel.spacing=unit(2,"lines"))+
   theme(legend.position = "none" ) -> resp
 
 print(resp)
-        #legend.text = element_text(size = 12), 
-   # legend.title = element_text(size = 14)
+
+annotate_figure(
+  resp,
+  left = text_grob("Respiration",
+                   color = "black", rot = 90, size = 30, face = "bold"),
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> resp.fig
+
+ggsave("resp.fig2.png", plot = resp.fig, path = here(),
+       width = 20,
+       height = 15,
+       units = "in")
+ 
+```
+
+```{r}
+netphoto.filtered%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
+                                     timepoint == "day1" ~ "1",
+                                     timepoint == "day10" ~ "10",
+                                     timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.factor(timepoint)) -> netphoto.filtered
 ```
 
 net photosynthesis figure
 ```{r}
 ggplot(data = netphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, col = temp))+
-  stat_summary(fun=mean, geom="point", aes(group=temp), size = 3, position = position_dodge(width = 0.3))+
-  stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.3))+
-  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
+  stat_summary(fun=mean, geom="point", aes(group=temp), size = 7.5, position = position_dodge(width = 0.5))+
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.5))+
+  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.5), linetype = "dashed", aes(group = temp))+
   ylab("O\u00b2 \u00b5mol/cm\u00b2/hr")+
-  xlab(NULL)+
-  facet_grid(~wound, labeller = labeller(wound = c("0" = " ", "1" = " ", "2" = " ")), scales = "free")+ 
+  xlab("Day")+
+  facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), ncol = 1)+ 
   labs(fill = "Temperature")+
- scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
-  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
+ scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Warming"))+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Warming"))+
   guides(col = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
   theme_base()+
-   theme_few(base_size = 20)+
-  theme(panel.spacing=unit(1,"lines"))+
-  theme(legend.position = "none")+
-  theme(strip.text = element_blank()) -> net.photo
+   theme_few(base_size = 30)+
+  theme(panel.spacing=unit(2,"lines"))+
+  theme(legend.position = "right") -> net.photo.woundfacet
 
-print(net.photo)
+ggplot(data = netphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = wound, col = temp))+
+  stat_summary(fun=mean, geom="point", aes(group=wound), size = 7.5, position = position_dodge(width = 0.5))+
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=wound), width = 0.2, position = position_dodge(width = 0.5))+
+  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.5), linetype = "dashed", aes(group = wound))+
+  ylab("O\u00b2 \u00b5mol/cm\u00b2/hr")+
+  xlab("Day")+
+  #ylim(.2, 0.47)+
+  facet_wrap(~temp, labeller = labeller(temp = c("H" = "Warming", "A" = "Ambient")), ncol = 1)+ 
+  labs(fill = "Injury")+
+ scale_shape_manual(values = c(16, 17, 15),labels = c("Non-injured", "Fragmentation", "Abrasion"))+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Warming"))+
+  guides(col = guide_legend("Temperature"), shape = guide_legend("Injury"))+
+  theme_base()+
+   theme_few(base_size = 30)+
+  theme(panel.spacing=unit(2,"lines"))+
+  theme(legend.position = "right") ->net.photo.tempfacet
+
+
+# annotate_figure(
+#   net.photo.woundfacet,
+#   left = text_grob("Net Photosynthesis",
+#                    color = "black", rot = 90, size = 30, face = "bold"),
+#    # bottom = text_grob("Time (Day)", color = "black",
+#    #                   face = "bold", size = 20)
+#   )-> net.photo.woundfacet.fig
+# 
+# annotate_figure(
+#   net.photo.tempfacet,
+#   left = text_grob("Net Photosynthesis",
+#                    color = "black", rot = 90, size = 30, face = "bold"),
+#    # bottom = text_grob("Time (Day)", color = "black",
+#    #                   face = "bold", size = 20)
+#   )-> net.photo.tempfacet.fig
+
+# ggarrange(net.photo.woundfacet, net.photo.tempfacet,                                                # First row with scatter plot
+#           ncol = 2, 
+#           labels = c("A", "B")                                        # Labels of the scatter plot
+#           ) -> fig2
+
+annotate_figure(
+  net.photo.woundfacet,
+  left = text_grob("Net Photosynthesis",
+                   color = "black", rot = 90, size = 30, face = "bold"),
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> net.photo.fig
+
+ggsave("net.photo.fig2.png", plot = net.photo.fig, path = here(),
+       width = 15,
+       height = 20,
+       units = "in")
+
 ```
 
+
+```{r}
+grossphoto.filtered%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
+                                     timepoint == "day1" ~ "1",
+                                     timepoint == "day10" ~ "10",
+                                     timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.factor(timepoint)) -> grossphoto.filtered
+```
+
+
+Gross photosynthesis figure
+```{r}
+
+ggplot(data = grossphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, col = temp))+
+  stat_summary(fun=mean, geom="point", aes(group=temp), size = 7.5, position = position_dodge(width = 0.5))+
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(group=temp), width = 0.2, position = position_dodge(width = 0.5))+
+  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.5), linetype = "dashed", aes(group = temp))+
+  ylab("O\u00b2 \u00b5mol/cm\u00b2/hr")+
+  xlab("Day")+
+ # facet_wrap(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), ncol = 1, scales = "free")+ 
+  labs(fill = "Temperature")+
+ scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Warming"))+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Warming"))+
+  guides(col = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
+  theme_base()+
+   theme_few(base_size = 30)+
+  theme(panel.spacing=unit(2,"lines"))+
+  theme(legend.position = "none" ) -> grossp
+
+print(grossp)
+
+annotate_figure(
+  grossp,
+  left = text_grob("Gross Photosynthesis",
+                   color = "black", rot = 90, size = 30, face = "bold"),
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> grossp.fig
+
+ggsave("grossp.fig2.png", plot = grossp.fig, path = here(),
+       width = 20,
+       height = 15,
+       units = "in")
+ 
+```
+
+
+
+```{r}
+ratio.filtered%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
+                                     timepoint == "day1" ~ "1",
+                                     timepoint == "day10" ~ "10",
+                                     timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.factor(timepoint)) -> ratio.filtered
+```
 
 P:R fig
 ```{r}
 ggplot(data = ratio.filtered, aes(x = timepoint, y = ratio, col = temp, group = temp, shape = temp))+
   #geom_jitter(size = .5, alpha = .5)+
- stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.3)) +
-  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.3), aes(group = temp))+
-  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.3), linetype = "dashed", aes(group = temp))+
+ stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.5)) +
+  stat_summary( fun = "mean", geom = "point", size = 7.5, position = position_dodge(width = 0.5), aes(group = temp))+
+  stat_summary( fun = "mean", geom = "line", size = .4, position = position_dodge(width = 0.5), linetype = "dashed", aes(group = temp))+
  #geom_smooth(data=ratio.filtered, aes(x=timepoint, y=ratio, group = temp), alpha=0.3, method = "lm")+
   ylab(NULL)+
-  xlab("Time (Day)")+
- facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  xlab("Day")+
+ #facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
   theme_classic()+
   labs(color = "Temperature")+
-  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
-  scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
-   theme_few(base_size = 20) +
-  theme(panel.spacing=unit(1,"lines"))+
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Warming"))+
+  scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Warming"))+
+   theme_few(base_size = 30) +
+  theme(panel.spacing=unit(2,"lines"))+
   guides(color = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
   theme(strip.text = element_blank())+ theme(legend.position = "right") -> PR
+
+annotate_figure(
+  PR,
+  left = text_grob("Daily P:R",
+                   color = "black", rot = 90, size = 30, face = "bold"),
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> PR
+
+ggsave("PR.fig.png", plot = PR, path = here(),
+       width = 20,
+       height = 15,
+       units = "in")
 ```
 
 combining net photosynthesis, respiration, and P:R plots
@@ -189,6 +398,20 @@ ggarrange(resp.fig, net.photo.fig, PR.fig,                                      
 ggsave("R.NP.PR.fig.jpg", plot = fig2, path = here(),
        width = 16,
        height = 12,
+       units = "in")
+
+```
+combining gross photosynthesis, respiration, and P:R plots
+```{r}
+ggarrange(resp.fig, grossp.fig, PR,                                                # First row with scatter plot
+          nrow = 3, 
+          labels = c("A", "B", "C"), font.label = list(size = 25)                                       # Labels of the scatter plot
+          ) -> fig2
+
+
+ggsave("R.GP.PR.fig.png", plot = fig2, path = here(),
+       width = 20,
+       height = 30,
        units = "in")
 
 ```

@@ -21,6 +21,7 @@ library(sjPlot)
 library(knitr)
 library(kableExtra)
 library(readxl)
+library(ggpubr)
 ```
 # load initial data
 ```{r}
@@ -79,16 +80,21 @@ samp.info<- read.csv("/Users/ninahmunk/Desktop/Projects/Acropora_Regeneration-ma
 
 full.data<- left_join(all.data, samp.info, by = "coral_id")
 
-full.data<- full.data%>%mutate(wound = as.factor(wound))%>%
-  mutate(genotype = as.factor(genotype))%>%
-  mutate(temp = as.factor(temp))%>%
-  mutate(timepoint = case_when(timepoint == "initial" ~ "0",
-                               timepoint == "day10" ~ "10",
-                               timepoint == "final" ~ "19"))
+# full.data<- full.data%>%mutate(wound = as.factor(wound))%>%
+#   mutate(genotype = as.factor(genotype))%>%
+#   mutate(temp = as.factor(temp))%>%
+#   mutate(timepoint = case_when(timepoint == "initial" ~ "0",
+#                                timepoint == "day10" ~ "10",
+#                                timepoint == "final" ~ "19"))
+# 
+# full.data$timepoint<- as.numeric(full.data$timepoint)
+# full.data$genotype <- factor(full.data$genotype)
+# full.data$temp <- factor(full.data$temp)
 
-full.data$timepoint<- as.numeric(full.data$timepoint)
-full.data$genotype <- factor(full.data$genotype)
-full.data$temp <- factor(full.data$temp)
+full.data%>%mutate(timepoint = as.factor(timepoint),
+               temp = as.factor(temp),
+               wound = as.factor(wound),
+               genotype = as.factor(genotype)) -> full.data
 
 ```
 
@@ -118,8 +124,19 @@ Full lmer model
 ```{r}
 data.filtered = subset(data, percent_affected <= 10)
 
-mod<- lmer(fv_fm ~ wound*temp*timepoint + (1|genotype/coral_id), data = data.filtered%>%filter(!timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-anova(mod, type = 3)
+# mod<- lmer(fv_fm ~ wound*temp*timepoint + (1|genotype/coral_id), data = data.filtered%>%filter(!timepoint == 0), contrasts = list(wound = "contr.sum", temp = "contr.poly"))
+
+#model with time as factor
+mod<- lmer(fv_fm ~ wound*temp*timepoint + (1|genotype/coral_id), data = data.filtered%>%filter(!timepoint == "initial"))
+
+anova(mod, type = 3) #significant temp*timepoint interaction
+
+emmeans(mod, pairwise ~ temp*timepoint) #make pairwise comparisons
+
+# checking for differences in groups pre-treatments
+mod<- lmer(fv_fm ~ wound*temp + (1|genotype), data = data.filtered%>%filter(timepoint == "initial"))
+
+MMdlCF <- emtrends(mod, ~temp, var = "timepoint")
 ```
 model at day 0 (pre treatment)
 ```{r}
@@ -187,28 +204,38 @@ summarySE(data.filtered, measurevar = "fv_fm", groupvars = c("temp", "timepoint"
  figure based on full model: temp*timepoint significant 
 ```{r}
 
-ggplot(data = data.filtered, aes(x = timepoint, y = fv_fm, col = temp, linetype = temp))+geom_smooth(method = "lm")+
+ggplot(data = data.filtered, aes(x = timepoint, y = fv_fm, col = temp))+
+  geom_smooth(method = "lm", size = 2.5)+
   #geom_jitter(size = .5, alpha = .5)+
   #stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.2)) +
   #stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
   #stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
-ylab(expression(Photosynthetic~Efficiency~(F[V]~F[M])))+
+ylab(expression((F[V]~F[M])))+
   #ylab("Photosynthetic Efficiency (Fv/Fm)")+
-  xlab("Day")+
+  xlab("Time (days)")+
   #facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
   theme_classic()+
   labs(color = "Temperature")+
   scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
-   theme_few(base_size = 20) +
-  annotate("text", x=12, y=696, label= "p = 0.01", size = 6)+
+   theme_few(base_size = 30) +
+  #annotate("text", x=12, y=696, label= "p = 0.01", size = 6)+
   scale_linetype_discrete(name="Temperature", 
                           breaks=c("A", "H"), 
                           labels = c("Ambient", "Elevated"))+
-  guides(col = guide_legend("Temperature"), linetype = guide_legend("Temperature"))+ 
-  theme(legend.position = "inside", legend.position.inside = c(.2,.2)) -> fvfm
+  guides(col = guide_legend("Temperature"))+ 
+  theme(legend.position = "NULL", legend.position.inside = c(.2,.2)) -> fvfm
 
+print(fvfm)
 
-ggsave("fvfm.jpg", plot = fvfm, path = here(),
+annotate_figure(
+  fvfm,
+  left = text_grob("Photosynthetic Efficiency",
+                   color = "black", rot = 90, size = 30, face = "bold"),
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> fvfm.lm
+
+ggsave("fvfm.lm.jpg", plot = fvfm.lm, path = here(),
        width = 12,
        height = 8,
        units = "in")
@@ -245,32 +272,47 @@ ggplot(data = data.filtered%>%filter(!timepoint == 0), aes(x = timepoint, y = fv
 ```
  figure with means
 ```{r}
-ggplot(data = data.filtered, aes(x = as.factor(timepoint), y = fv_fm, col = temp, shape = temp))+
+
+xlabels <- c("Pre-treatment", "Day 10", "Day 19")
+
+#filter out initial timepoint 
+data.filtered%>%filter(!timepoint == "initial")-> data.filtered2
+data.filtered2%>%mutate(timepoint = case_when(timepoint == "day10" ~ "10",
+                                     timepoint == "final" ~ "19"))%>%mutate(timepoint = as.factor(timepoint)) -> data.filtered2
+
+
+ggplot(data = data.filtered2, aes(x = timepoint, y = fv_fm, col = temp, shape = temp))+
   #geom_jitter(size = .5, alpha = .5)+
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.2)) +
-  stat_summary( fun = "mean", geom = "point", size = 3, position = position_dodge(width = 0.2))+ 
-  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.2), linetype = "dashed", aes(group = temp))+
-  ylab(expression((F[V]~F[M])))+
-  xlab("Time (Day)")+
-  facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.5)) +
+  stat_summary( fun = "mean", geom = "point", size = 7.5, position = position_dodge(width = 0.5))+ 
+  stat_summary( fun = "mean", geom = "line", size = 1, position = position_dodge(width = 0.5), linetype = "dashed", aes(group = temp), alpha = 0.5)+
+  ylab(expression((F[V]/F[M])))+
+  xlab("Day")+
+ # facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
   theme_classic()+
   labs(color = "Temperature")+
-  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
-  scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Elevated"))+
-   theme_few(base_size = 20) +
-  guides(color = guide_legend("Temperature"), shape = guide_legend("Temperature"))+ theme(legend.position = "right") ->fvfm
+  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Warming"))+
+  scale_shape_manual(values = c(1, 19), labels = c("Ambient", "Warming"))+
+  theme_few(base_size = 30) +
+  guides(color = guide_legend("Temperature"), shape = guide_legend("Temperature"))+
+  theme(legend.position = "right")+
+  theme(panel.spacing=unit(3,"lines"))->fvfm
+  #scale_x_discrete(labels= xlabels)+
+  #theme(axis.text.x=element_text(angle=30, vjust=.8, hjust=0.8))
+
+print(fvfm)
 
 annotate_figure(
   fvfm,
   left = text_grob("Photosynthetic Efficiency",
-                   color = "black", rot = 90, size = 20, face = "bold"),
+                   color = "black", rot = 90, size = 30, face = "bold"),
    # bottom = text_grob("Time (Day)", color = "black",
    #                   face = "bold", size = 20)
   )-> fvfm.fig
 
-ggsave("fvfm.jpg", plot = fvfm.fig, path = here(),
-       width = 12,
-       height = 8,
+ggsave("fvfm.fig.jpg", plot = fvfm.fig, path = here(),
+       width = 20,
+       height = 15,
        units = "in")
 
 ```

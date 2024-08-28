@@ -22,6 +22,7 @@ library(pbkrtest)
 library(sjPlot)
 library(knitr)
 library(kableExtra)
+library(ggpubr)
 ```
 
 ## GROWTH
@@ -210,13 +211,22 @@ ggplot(meangrowthrate, aes(x = temp, y = Mean, colour = temp, fill = temp))+
   scale_fill_manual(values = c('white', 'white'), labels=c("Ambient", "Elevated"), guide = "none")+
   scale_x_discrete(labels = c('Ambient','Elevated'))+
 xlab(expression("Temperature"))+
-  ylab(expression(paste("Calcification Rate (mg cm\u00b2 /day)")))+
+  ylab(expression(paste("(mg cm\u00b2 /day)")))+
   theme(axis.text.x=element_text(colour="black"))+
-  theme(axis.text.y=element_text(colour="black"))+theme_few(base_size = 20) -> GR
+  theme(axis.text.y=element_text(colour="black"))+
+  theme_few(base_size = 30)+
+  theme(panel.spacing=unit(2,"lines"))-> GR
 
-#save plot
+#annotate plot
+annotate_figure(
+  GR,
+  left = text_grob("Calcification Rate",
+                   color = "black", rot = 90, size = 30, face = "bold"),
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> GR.fig
 
-ggsave("calcification.png", plot = GR, path = here(),
+ggsave("calcification.png", plot = GR.fig, path = here(),
        width = 12,
        height = 8,
        units = "in")

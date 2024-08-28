@@ -6,6 +6,14 @@ library(cowplot)
 library(lme4)
 library(lmerTest)
 library(here)
+library(rstatix)
+library(Rmisc)
+library(janitor)
+library(ggthemes)
+library(pbkrtest)
+library(sjPlot)
+library(knitr)
+library(kableExtra)
 
 #check working directory and set working directory to folder with raw temperature data 
 getwd()
@@ -203,9 +211,15 @@ ambient <- ambientsumpfull%>%group_by(longdate)%>%summarise(meantemp = mean(temp
 std_err<- ambientsumpfull%>%aggregate(temp_c ~ longdate, FUN = function(x) sd(x)/sqrt(length(x)))
 ambient%>%left_join(std_err, by = "longdate") -> ambient
 
+summarySE(ambientsumpfull, measurevar = "temp_c",
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) # average 27.86313 +/- 0.7485876 SD
+
 hot<- hot.only%>%group_by(longdate)%>%summarise(meantemp = mean(temp_c))%>%mutate(treatment = "Elevated") 
 std_err2<- hot.only%>%aggregate(temp_c ~ longdate, FUN = function(x) sd(x)/sqrt(length(x))) 
 hot%>%left_join(std_err2, by = "longdate") -> hot
+
+summarySE(hot.only, measurevar = "temp_c",
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE) # average 29.51483 +/- 0.3508441 SD
 
 rbind(ambient, hot)%>%rename(std_err = temp_c) -> temperature 
 
@@ -250,6 +264,11 @@ mod <- t.test(x = test.wide$Elevated,
 print(mod)
 
 ############## temp differences between TT ##################################### #####
-test.wide%>%mutate(diff = Elevated - Ambient)-> test.wide
+test.wide%>%mutate(diff = Elevated - Ambient)-> test.wide.diff
 #  difference of mean temperature between treatments ranged from 2.4964236 to 0.8497917. 
+
+# 19 day average difference in C between both temperatures 
+summary(test.wide.diff) # across 19 days the mean difference in temperatures between TT was 1.6475 C
+summarySE(test.wide.diff, measurevar = "diff",
+          na.rm = FALSE, conf.interval = 0.95, .drop = TRUE)
 

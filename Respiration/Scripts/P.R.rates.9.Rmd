@@ -26,6 +26,7 @@ library(kableExtra)
 library(ggpattern)
 library(hrbrthemes)
 library(ggpubr)
+
 ```
 
 # Load Data
@@ -56,13 +57,17 @@ data%>%left_join(worm.damage, by = "coral_id")-> data2
 Change timepoint to be a continuous variable  
 ```{r}
 
-data2%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
-                                     timepoint == "day1" ~ "1",
-                                     timepoint == "day10" ~ "10",
-                                     timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.numeric(timepoint),
-                                                                            temp = as.factor(temp),
-                                                                            wound = as.factor(wound),
-                                                                            genotype = as.factor(genotype)) -> data2
+# data2%>%mutate(timepoint = case_when(timepoint == "day0" ~ "0",
+#                                      timepoint == "day1" ~ "1",
+#                                      timepoint == "day10" ~ "10",
+#                                      timepoint == "day19" ~ "19"))%>%mutate(timepoint = as.factor(timepoint),
+#                                                                             temp = as.factor(temp),
+#                                                                             wound = as.factor(wound),
+#                                                                             genotype = as.factor(genotype)) -> data2
+data2%>%mutate(timepoint = as.factor(timepoint),
+               temp = as.factor(temp),
+               wound = as.factor(wound),
+               genotype = as.factor(genotype)) -> data2
 
 ```
 
@@ -71,6 +76,13 @@ Filter data for less than 10% worm damage
 rates.filtered = subset(data2, percent_affected <= 10)
 ```
 
+```{r}
+# rates.filtered%>%select(coral_id, rate, umol.cm2.hr, wound, temp, timepoint)%>%pivot_wider(names_from = rate, values_from = umol.cm2.hr)%>%clean_names-> rates.fil.wide
+# ggplot(data = rates.fil.wide, aes(x=net_photosynthesis, y = respiration, col = wound))+geom_point()+geom_smooth(method = "loess")+facet_wrap(~temp)
+```
+
+
+
 # RESPIRATION
 Full LMM for respiration rates. This is not including the pre-experiment timepoint (day 0/-7). 
 wound, temp, timepoint 3-way interaction is highly non-significant 
@@ -78,14 +90,22 @@ wound, temp, timepoint 3-way interaction is highly non-significant
 rates.filtered%>%filter(!timepoint == 0)%>%filter(rate == "Respiration") -> resp.filtered
 
 mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = resp.filtered, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
-anova(mod, type = 3) 
 
+#model for respiration
+mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = resp.filtered)
+anova(mod, type = 3) # significant temp*timepoint interaction
+emmeans(mod, pairwise ~ temp*timepoint) #make pairwise comparisons
+
+MMdlCF <- emtrends(mod, ~temp, var = "timepoint")
 ```
 Reduced LMM for respiration rates. 
 ** Temp and time interaction is significant ** 
 ```{r}
 mod<- lmer(umol.cm2.hr ~ wound*temp + temp*timepoint + (1|genotype/coral_id), data = resp.filtered, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
 anova(mod, type = 3) 
+
+MMdlCF <- emtrends(mod, ~temp, var = "timepoint")
+
 ```
 Checking respiration rates prior to onset of experiment (day 0/-7). 
 ** no significant differences **
@@ -139,29 +159,36 @@ ggplot(time3, aes(x=temp, y=umol.cm2.hr, color=temp)) +
 Respiration figure that pairs with result from full lmer model with time. 
 ```{r}
 
-ggplot(data = resp.filtered, aes(x = timepoint, y = umol.cm2.hr, col = temp, linetype = temp))+
+ggplot(data = resp.filtered, aes(x = timepoint, y = umol.cm2.hr, col = temp))+
   #geom_jitter(size = .5, alpha = .5)+
   #stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, position = position_dodge(width = 0.4)) +
  # stat_summary( fun = "mean", geom = "point", size = 2, position = position_dodge(width = 0.4))+ 
   #stat_summary( fun = "mean", geom = "line", size = .5, position = position_dodge(width = 0.4), linetype = "dashed", aes(group = temp))+
-  geom_smooth(data=resp.filtered, aes(x=timepoint, y=umol.cm2.hr, col = temp, linetype = temp), alpha=0.3, method = "lm")+
-  ylab("Respiration (O\u00b2 \u00b5mol/cm\u00b2/hr)")+
-  xlab("Time")+
- # facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+  geom_smooth(data=resp.filtered, aes(x=timepoint, y=umol.cm2.hr, col = temp), alpha=0.3, method = "lm", size = 2.5)+
+  ylab(" O\u00b2 \u00b5mol/cm\u00b2/hr")+
+  xlab("Time (days)")+
+  #facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
   theme_classic()+
   labs(color = "Temperature")+
   scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
-   theme_few(base_size = 12)+
-  annotate("text", x=12, y=.44, label= "p < 0.01", size = 6)+
+   theme_few(base_size = 30)+
+  #annotate("text", x=12, y=.44, label= "p < 0.01", size = 6)+
   scale_linetype_discrete(name="Temperature", 
                           breaks=c("A", "H"), 
                           labels = c("Ambient", "Elevated"))+
-  guides(col = guide_legend("Temperature"), linetype = guide_legend("Temperature"))+ 
+  guides(col = guide_legend("Temperature"))+ 
   theme(legend.position = "none") -> resp
 
+annotate_figure(
+  resp,
+  left = text_grob("Respiration",
+                   color = "black", rot = 90, size = 30, face = "bold"),
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> resp.lm
 
-ggsave("resp.png", plot = resp, path = here(),
-       width = 10,
+ggsave("resp.lm.png", plot = resp.lm, path = here(),
+       width = 12,
        height = 8,
        units = "in")
 ```
@@ -197,6 +224,7 @@ rates.filtered%>%filter(!timepoint == 0)%>%filter(rate == "Net Photosynthesis") 
 mod<- lmer(umol.cm2.hr ~ wound*temp*timepoint + (1|genotype/coral_id), data = netphoto.filtered, contrasts = list(wound = "contr.sum", temp = "contr.poly"))
 anova(mod, type = 3) 
 
+MMdlCF <- emtrends(mod, ~temp*wound, var = "timepoint")
 ```
 
 Checking net photosynthesis rates prior to onset of experiment (day 0/-7). 
@@ -245,30 +273,30 @@ emmeans(model_time3, pairwise ~ temp*wound)
 Net photosynthesis figure that pairs with result from model
 ```{r}
 
-ggplot(data = netphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = temp, linetype = temp))+
-  geom_smooth(data=netphoto.filtered, aes(x=timepoint, y=umol.cm2.hr, col = temp, linetype = temp), alpha=0.3, method = "lm")+
-  ylab("Net Photosynthesis (O\u00b2 \u00b5mol/cm\u00b2/hr)")+
-  xlab("Time (Day)")+
- facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")), scales = "free_y", space="free")+ 
+ggplot(data = netphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, col = temp, linetype = wound))+
+  geom_smooth(data=netphoto.filtered, aes(x=timepoint, y=umol.cm2.hr, col = temp, linetype = wound), alpha=0.3, method = "lm", size = 2.5)+
+  ylab("O\u00b2 \u00b5mol/cm\u00b2/hr")+
+  xlab("Time (days)")+
+  scale_linetype_manual(name = "Injury", breaks = c("0", "1", "2"), labels = c("No Injury", "Fragmentation", "Abrasion"), values = c("solid", "dashed", "dotted"))+
+  scale_color_manual(name = "Temperature", values = c('blue', 'red'), breaks = c("A", "H"), labels = c("Ambient", "Elevated"))+
+  facet_grid(~wound, labeller = labeller(wound = c("0" = "No Injury", "1" = "Fragmentation", "2" = "Abrasion")))+
   theme_classic()+
-  labs(color = "Temperature")+
-  scale_color_manual(values = c('blue', 'red'), labels = c("Ambient", "Elevated"))+
-   theme_few(base_size = 12)+
- # annotate("text", x=12, y=.44, label= "p < 0.01", size = 6)+
-  scale_linetype_discrete(name="Temperature", 
-                          breaks=c("A", "H"), 
-                          labels = c("Ambient", "Elevated"))+
-  guides(col = guide_legend("Temperature"), linetype = guide_legend("Temperature"))+
-  theme(legend.position = "right")-> net.photo
+  theme_few(base_size = 30)+
+  theme(legend.position = "right")+
+  guides(fill = guide_legend(keywidth = 1, keyheight = 1),
+    linetype=guide_legend(keywidth = 3, keyheight = 1, override.aes = list(col = "black")),
+    colour=guide_legend(keywidth = 3, keyheight = 1))-> net.photo
 
 annotate_figure(
   net.photo,
-  top = text_grob("p = 0.035",
-                   color = "black", size = 15)
-  ) -> net.photo.fig
+  left = text_grob("Net Photosynthesis",
+                   color = "black", rot = 90, size = 30, face = "bold"),
+   # bottom = text_grob("Time (Day)", color = "black",
+   #                   face = "bold", size = 20)
+  )-> net.photo.lm
 
-ggsave("net.photo.jpg", plot = net.photo.fig, path = here(),
-       width = 10,
+ggsave("net.photo.lm.jpg", plot = net.photo.lm, path = here(),
+       width = 12,
        height = 8,
        units = "in")
 ```
@@ -292,8 +320,12 @@ ggplot(data = netphoto.filtered, aes(x = timepoint, y = umol.cm2.hr, shape = tem
    theme_few(base_size = 15)+
   theme(panel.spacing=unit(1,"lines"))+
   theme(legend.position = "bottom") -> net.photo
- 
 
+ggplot(data = netphoto.filtered%>%filter(timepoint ==1), aes(x = wound, y = umol.cm2.hr))+geom_boxplot()+facet_grid(~temp)+ylim(0,0.65)
+ggplot(data = netphoto.filtered%>%filter(timepoint ==10), aes(x = wound, y = umol.cm2.hr))+geom_boxplot()+facet_grid(~temp)+ylim(0,0.65)
+ggplot(data = netphoto.filtered%>%filter(timepoint ==19), aes(x = wound, y = umol.cm2.hr))+geom_boxplot()+facet_grid(~temp)+ylim(0,0.65)
+
+ggplot(data = netphoto.filtered, aes(x = wound, y = umol.cm2.hr))+geom_boxplot()+facet_grid(timepoint~temp)
 ```
 summary statistics for NP
 ```{r}
